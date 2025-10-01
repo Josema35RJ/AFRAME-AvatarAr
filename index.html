@@ -2,90 +2,134 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Avatar AR con Marcador Táctil</title>
+  <title>Avatar AR con Reticle y Ajuste Automático</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 </head>
 <body style="margin:0; overflow:hidden;">
 
-  <a-scene embedded arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;" renderer="shadowMapEnabled: true">
+<a-scene embedded arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;" renderer="shadowMapEnabled: true">
 
-    <!-- Assets -->
-    <a-assets>
-      <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
-      <img id="groundTexture" src="https://cdn.pixabay.com/photo/2016/09/02/22/17/grass-1643215_1280.jpg">
-    </a-assets>
+  <!-- Assets -->
+  <a-assets>
+    <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
+    <img id="groundTexture" src="https://cdn.pixabay.com/photo/2016/09/02/22/17/grass-1643215_1280.jpg">
+  </a-assets>
 
-    <!-- Suelo de referencia para colocar el avatar -->
-    <a-plane id="ground"
-             position="0 0 0"
-             rotation="-90 0 0"
-             width="10"
-             height="10"
-             src="#groundTexture"
-             repeat="4 4"
-             shadow="receive: true"
-             class="clickable">
-    </a-plane>
+  <!-- Suelo visible para referencia -->
+  <a-plane id="ground"
+           rotation="-90 0 0"
+           width="10" height="10"
+           src="#groundTexture"
+           repeat="4 4"
+           shadow="receive: true"
+           class="clickable">
+  </a-plane>
 
-    <!-- Avatar inicial oculto -->
-    <a-entity id="avatar"
-              gltf-model="#avatar"
-              visible="false"
-              animation-mixer
-              shadow="cast: true">
-    </a-entity>
+  <!-- Reticle visible que sigue el dedo/mouse -->
+  <a-ring id="reticle"
+          position="0 0 0"
+          rotation="-90 0 0"
+          radius-inner="0.1"
+          radius-outer="0.15"
+          color="green"
+          visible="true">
+  </a-ring>
 
-    <!-- Luces -->
-    <a-entity light="type: ambient; intensity: 0.6"></a-entity>
-    <a-entity light="type: directional; intensity: 1" position="2 4 2" rotation="-45 45 0" shadow="cast: true"></a-entity>
+  <!-- Avatar oculto inicialmente -->
+  <a-entity id="avatar"
+            gltf-model="#avatar"
+            visible="false"
+            animation-mixer
+            shadow="cast: true">
+  </a-entity>
 
-    <!-- Cámara -->
-    <a-entity id="camera" camera look-controls position="0 1.6 0"></a-entity>
-  </a-scene>
+  <!-- Luces -->
+  <a-entity light="type: ambient; intensity: 0.6"></a-entity>
+  <a-entity light="type: directional; intensity: 1" position="2 4 2" rotation="-45 45 0" shadow="cast: true"></a-entity>
 
-  <script>
-    const avatar = document.querySelector('#avatar');
-    const camera = document.querySelector('#camera');
-    const scene = document.querySelector('a-scene');
+  <!-- Cámara -->
+  <a-entity id="camera" camera look-controls position="0 1.6 0"></a-entity>
 
-    avatar.addEventListener('model-loaded', () => {
-      const bbox = new THREE.Box3().setFromObject(avatar.object3D);
-      const modelHeight = bbox.max.y - bbox.min.y;
-      const desiredHeight = 1.8; // metros
-      const scale = desiredHeight / modelHeight;
-      avatar.object3D.scale.set(scale, scale, scale);
-      avatar.userData.bbox = bbox;
-      avatar.userData.scale = scale;
-    });
+</a-scene>
 
-    // Función para colocar avatar en la posición del clic
-    function placeAvatar(event) {
-      // Obtener la posición del clic en el plano
-      const intersection = scene.components.raycaster.intersectObjects(
-        scene.querySelectorAll('.clickable').map(e => e.object3D)
-      )[0];
+<script>
+const avatar = document.querySelector('#avatar');
+const reticle = document.querySelector('#reticle');
+const camera = document.querySelector('#camera');
+const scene = document.querySelector('a-scene');
 
-      if (!intersection) return;
+let bbox, scale;
 
-      const point = intersection.point;
-      const bbox = avatar.userData.bbox;
-      const scale = avatar.userData.scale;
+// Ajustar escala y altura cuando se cargue el modelo
+avatar.addEventListener('model-loaded', () => {
+  bbox = new THREE.Box3().setFromObject(avatar.object3D);
+  const modelHeight = bbox.max.y - bbox.min.y;
+  const desiredHeight = 1.8;
+  scale = desiredHeight / modelHeight;
+  avatar.object3D.scale.set(scale, scale, scale);
+  avatar.userData.bbox = bbox;
+  avatar.userData.scale = scale;
+});
 
-      // Ajustar posición Y para pies sobre el suelo
-      avatar.object3D.position.set(point.x, point.y - bbox.min.y * scale, point.z);
+// Función para colocar avatar en el suelo según reticle
+function placeAvatar(event) {
+  if(!bbox) return;
 
-      // Orientar hacia la cámara
-      const lookAt = camera.object3D.position.clone();
-      lookAt.y = avatar.object3D.position.y; // solo horizontal
-      avatar.object3D.lookAt(lookAt);
+  // Raycaster para detectar el plano del suelo
+  const mouse = new THREE.Vector2();
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
-      // Hacer visible
-      avatar.setAttribute('visible', 'true');
-    }
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera.getObject3D('camera'));
 
-    // Raycaster para detectar clics/taps en el plano
-    scene.addEventListener('click', placeAvatar);
-  </script>
+  const ground = scene.querySelectorAll('.clickable')[0].object3D;
+  const intersects = raycaster.intersectObject(ground);
+
+  if(intersects.length > 0){
+    const point = intersects[0].point;
+
+    // Posición del avatar: pies sobre el suelo
+    avatar.object3D.position.set(point.x, point.y - bbox.min.y * scale, point.z);
+
+    // Mirar hacia la cámara horizontalmente
+    const lookAt = camera.object3D.position.clone();
+    lookAt.y = avatar.object3D.position.y;
+    avatar.object3D.lookAt(lookAt);
+
+    // Hacer visible
+    avatar.setAttribute('visible', 'true');
+
+    // Mover reticle a esa posición
+    reticle.object3D.position.set(point.x, point.y + 0.01, point.z);
+  }
+}
+
+// Mantener reticle siguiendo el mouse/touch
+function moveReticle(event){
+  const mouse = new THREE.Vector2();
+  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(mouse, camera.getObject3D('camera'));
+
+  const ground = scene.querySelectorAll('.clickable')[0].object3D;
+  const intersects = raycaster.intersectObject(ground);
+  if(intersects.length > 0){
+    const point = intersects[0].point;
+    reticle.object3D.position.set(point.x, point.y + 0.01, point.z);
+  }
+}
+
+// Eventos
+scene.addEventListener('click', placeAvatar);
+scene.addEventListener('mousemove', moveReticle);
+scene.addEventListener('touchmove', (e)=>{
+  moveReticle(e.touches[0]);
+}, {passive:true});
+</script>
+
 </body>
 </html>
