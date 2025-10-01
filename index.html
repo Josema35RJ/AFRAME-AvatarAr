@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Avatar AR Simulado Automático</title>
+  <title>Avatar AR Simulado Fijo</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 </head>
@@ -29,6 +29,8 @@
     <!-- Avatar -->
     <a-entity id="avatar"
               gltf-model="#avatar"
+              scale="0.8 0.8 0.8"
+              position="0 0 -3"
               rotation="0 180 0"
               animation-mixer
               shadow="cast: true"
@@ -47,29 +49,6 @@
     const avatar = document.querySelector('#avatar');
     const camera = document.querySelector('#camera');
 
-    // Ajuste automático de altura, escala y posición
-    avatar.addEventListener('model-loaded', () => {
-      const bbox = new THREE.Box3().setFromObject(avatar.object3D);
-      const height = bbox.max.y - bbox.min.y;
-
-      const desiredHeight = 1.8; // altura final en metros
-      const scale = desiredHeight / height;
-      avatar.object3D.scale.set(scale, scale, scale);
-
-      // Ajustar posición Y para que los pies queden sobre el suelo
-      avatar.object3D.position.y = -bbox.min.y * scale;
-
-      // Ajustar posición Z (distancia frente a la cámara)
-      const distance = 2; // metros delante de la cámara
-      const cameraDir = new THREE.Vector3();
-      camera.object3D.getWorldDirection(cameraDir);
-      const cameraPos = camera.object3D.position.clone();
-      cameraDir.multiplyScalar(distance);
-      const newPos = cameraPos.clone().add(cameraDir);
-      avatar.object3D.position.x = newPos.x;
-      avatar.object3D.position.z = newPos.z;
-    });
-
     // Mantener avatar siempre mirando a la cámara
     function lookAtCamera() {
       const cameraPos = camera.object3D.position;
@@ -77,19 +56,6 @@
       requestAnimationFrame(lookAtCamera);
     }
     lookAtCamera();
-
-    // Opcional: mover avatar con clic/tap
-    const scene = document.querySelector('a-scene');
-    scene.addEventListener('click', () => {
-      const distance = 2;
-      const cameraDir = new THREE.Vector3();
-      camera.object3D.getWorldDirection(cameraDir);
-      const cameraPos = camera.object3D.position.clone();
-      cameraDir.multiplyScalar(distance);
-      const newPos = cameraPos.clone().add(cameraDir);
-      avatar.object3D.position.x = newPos.x;
-      avatar.object3D.position.z = newPos.z;
-    });
   </script>
 </body>
 </html>
