@@ -1,39 +1,25 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Avatar AR Estable Frente al Usuario</title>
+  <title>Avatar AR Automático</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 </head>
 <body style="margin:0; overflow:hidden;">
   <a-scene embedded arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;" renderer="shadowMapEnabled: true">
     
-    <!-- Assets -->
     <a-assets>
       <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
       <img id="groundTexture" src="https://cdn.pixabay.com/photo/2016/09/02/22/17/grass-1643215_1280.jpg">
     </a-assets>
 
-    <!-- Suelo -->
-    <a-plane id="ground"
-             position="0 0 0"
-             rotation="-90 0 0"
-             width="10"
-             height="10"
-             src="#groundTexture"
-             repeat="4 4"
-             shadow="receive: true">
-    </a-plane>
+    <!-- Plane para detectar suelo y colocar el avatar -->
+    <a-entity arjs-anchor="preset: floor">
+      <a-plane position="0 0 0" rotation="-90 0 0" width="10" height="10" src="#groundTexture" repeat="4 4" shadow="receive: true"></a-plane>
 
-    <!-- Avatar -->
-    <a-entity id="avatar"
-              gltf-model="#avatar"
-              rotation="0 180 0"
-              animation-mixer
-              shadow="cast: true"
-              visible="true">
+      <!-- Avatar sobre el suelo -->
+      <a-entity id="avatar" gltf-model="#avatar" animation-mixer shadow="cast: true"></a-entity>
     </a-entity>
 
     <!-- Luz -->
@@ -41,36 +27,36 @@
     <a-entity light="type: directional; intensity: 1" position="2 4 2" rotation="-45 45 0" shadow="cast: true"></a-entity>
 
     <!-- Cámara -->
-    <a-entity id="camera" camera look-controls position="0 1.6 0"></a-entity>
+    <a-entity camera look-controls position="0 1.6 0"></a-entity>
   </a-scene>
 
   <script>
     const avatar = document.querySelector('#avatar');
-    const camera = document.querySelector('#camera');
+    const camera = document.querySelector('a-entity[camera]');
 
     avatar.addEventListener('model-loaded', () => {
-      // 1️⃣ Escala automática basada en altura
+      // Bounding box
       const bbox = new THREE.Box3().setFromObject(avatar.object3D);
       const modelHeight = bbox.max.y - bbox.min.y;
+
+      // Escala automática según altura deseada
       const desiredHeight = 1.8; // metros
       const scale = desiredHeight / modelHeight;
       avatar.object3D.scale.set(scale, scale, scale);
 
-      // 2️⃣ Ajuste de altura para que los pies toquen el suelo
+      // Ajustar Y para pies sobre el suelo
       avatar.object3D.position.y = -bbox.min.y * scale;
 
-      // 3️⃣ Posición fija frente a la cámara, independiente de la posición real
-      avatar.object3D.position.set(0, avatar.object3D.position.y, -3); // X=0, Z=-3
-
-      // 4️⃣ Orientar el avatar hacia la cámara (solo horizontal)
-      const lookAt = new THREE.Vector3(camera.object3D.position.x, avatar.object3D.position.y, camera.object3D.position.z);
-      avatar.object3D.lookAt(lookAt);
+      // Posicionar a una distancia inicial frente a la cámara (aprox)
+      avatar.object3D.position.z = -2; // siempre delante
     });
 
-    // Actualización continua: mantener avatar mirando la cámara horizontalmente
+    // Mirar siempre a la cámara horizontalmente
     function lookAtCamera() {
-      const lookAt = new THREE.Vector3(camera.object3D.position.x, avatar.object3D.position.y, camera.object3D.position.z);
-      avatar.object3D.lookAt(lookAt);
+      const camPos = camera.object3D.position.clone();
+      const avatarPos = avatar.object3D.position.clone();
+      camPos.y = avatarPos.y; // solo horizontal
+      avatar.object3D.lookAt(camPos);
       requestAnimationFrame(lookAtCamera);
     }
     lookAtCamera();
