@@ -1,8 +1,9 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Avatar AR Frente al Usuario Estable</title>
+  <title>Avatar AR Estable Frente al Usuario</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 </head>
@@ -48,31 +49,28 @@
     const camera = document.querySelector('#camera');
 
     avatar.addEventListener('model-loaded', () => {
+      // 1️⃣ Escala automática basada en altura
       const bbox = new THREE.Box3().setFromObject(avatar.object3D);
-      const height = bbox.max.y - bbox.min.y;
-
-      // Escala automática
+      const modelHeight = bbox.max.y - bbox.min.y;
       const desiredHeight = 1.8; // metros
-      const scale = desiredHeight / height;
+      const scale = desiredHeight / modelHeight;
       avatar.object3D.scale.set(scale, scale, scale);
 
-      // Altura para pies sobre el suelo
+      // 2️⃣ Ajuste de altura para que los pies toquen el suelo
       avatar.object3D.position.y = -bbox.min.y * scale;
 
-      // Posición fija frente a la cámara en coordenadas absolutas
-      avatar.object3D.position.x = 0; // centrado
-      avatar.object3D.position.z = -3; // 3 metros delante de la cámara
+      // 3️⃣ Posición fija frente a la cámara, independiente de la posición real
+      avatar.object3D.position.set(0, avatar.object3D.position.y, -3); // X=0, Z=-3
+
+      // 4️⃣ Orientar el avatar hacia la cámara (solo horizontal)
+      const lookAt = new THREE.Vector3(camera.object3D.position.x, avatar.object3D.position.y, camera.object3D.position.z);
+      avatar.object3D.lookAt(lookAt);
     });
 
-    // Mirar a la cámara horizontalmente sin subir/bajar la cabeza
+    // Actualización continua: mantener avatar mirando la cámara horizontalmente
     function lookAtCamera() {
-      const avatarPos = avatar.object3D.position.clone();
-      const cameraPos = camera.object3D.position.clone();
-
-      // Mantener Y del avatar, mirar solo horizontalmente
-      cameraPos.y = avatarPos.y;
-      avatar.object3D.lookAt(cameraPos);
-
+      const lookAt = new THREE.Vector3(camera.object3D.position.x, avatar.object3D.position.y, camera.object3D.position.z);
+      avatar.object3D.lookAt(lookAt);
       requestAnimationFrame(lookAtCamera);
     }
     lookAtCamera();
