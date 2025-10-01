@@ -1,39 +1,57 @@
 <!DOCTYPE html>
 <html lang="es">
   <head>
-    <meta charset="utf-8">
-    <title>Avatar en AR</title>
+    <meta charset="UTF-8">
+    <title>Avatar AR</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <!-- AR.js para AR WebXR -->
     <script src="https://cdn.jsdelivr.net/npm/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/aframe-ar@1.8.2/aframe-ar.min.js"></script>
   </head>
   <body style="margin: 0; overflow: hidden;">
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
-      
-      <!-- Assets -->
+    <a-scene
+      xrweb="ar: true; requiredFeatures: hit-test;"
+      embedded
+      renderer="colorManagement: true; physicallyCorrectLights: true"
+      vr-mode-ui="enabled: false"
+      loading-screen="enabled: false"
+    >
       <a-assets>
         <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
       </a-assets>
 
-      <!-- Avatar -->
-      <a-entity gltf-model="#avatar"
-                position="0 0 0"
-                rotation="0 0 0"
-                scale="0.5 0.5 0.5"
-                animation-mixer>
-      </a-entity>
-
-      <!-- Luz para que se vea realista -->
+      <!-- Luz ambiental y direccional -->
       <a-entity light="type: ambient; intensity: 0.6"></a-entity>
-      <a-entity light="type: directional; intensity: 1" 
-                position="1 2 1" 
-                rotation="-45 45 0">
+      <a-entity light="type: directional; intensity: 1" position="2 4 2"></a-entity>
+
+      <!-- Avatar -->
+      <a-entity id="avatar" gltf-model="#avatar" scale="0.5 0.5 0.5" rotation="0 0 0" animation-mixer visible="false"></a-entity>
+
+      <!-- Retícula para colocar el avatar en el suelo -->
+      <a-entity id="reticle" visible="false" 
+                geometry="primitive: ring; radiusInner: 0.05; radiusOuter: 0.06"
+                material="color: green; shader: flat"
+                xrweb-hit-test
+                position="0 0 -1">
       </a-entity>
-
-      <!-- Suelo invisible para AR -->
-      <a-plane position="0 0 0" rotation="-90 0 0" width="10" height="10" visible="false"></a-plane>
-
     </a-scene>
+
+    <script>
+      const scene = document.querySelector('a-scene');
+      const avatar = document.querySelector('#avatar');
+      const reticle = document.querySelector('#reticle');
+
+      // Esperar a que WebXR detecte plano
+      scene.addEventListener('xrweb-hit-test-ready', () => {
+        reticle.setAttribute('visible', true);
+      });
+
+      // Colocar avatar cuando el usuario toque la pantalla
+      window.addEventListener('click', () => {
+        if (reticle.object3D.visible) {
+          const position = reticle.object3D.position;
+          avatar.setAttribute('position', position);
+          avatar.setAttribute('visible', true);
+        }
+      });
+    </script>
   </body>
 </html>
