@@ -2,40 +2,103 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <title>AR.js Geolocalización Mejorada</title>
+    <title>AR.js Geolocalización</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <!-- AFrame y AR.js -->
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/ar.js@3.4.5/aframe/build/aframe-ar.min.js"></script>
+    <!-- A-Frame y AR.js optimizados -->
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ar.js@3.4.5/aframe/build/aframe-ar-nft.min.js"></script>
+    <style>
+      body {
+        margin: 0;
+        overflow: hidden;
+        background: #000; /* Fondo negro para depuración */
+      }
+      #loading {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: white;
+        font-family: Arial, sans-serif;
+        font-size: 20px;
+        text-align: center;
+        z-index: 1000;
+      }
+    </style>
   </head>
-  <body style="margin: 0; overflow: hidden;">
+  <body>
+    <div id="loading">Cargando escena AR...</div>
     <a-scene
       vr-mode-ui="enabled: false"
       embedded
-      arjs="sourceType: webcam; debugUIEnabled: false; gpsEnabled: true; trackingMethod: best;"
+      arjs="sourceType: webcam; debugUIEnabled: false; gpsMinDistance: 2; gpsAccuracy: 10; sourceWidth: 1280; sourceHeight: 720;"
+      renderer="antialias: true; alpha: true; colorManagement: true;"
     >
       <a-assets>
-        <!-- Cargar el modelo 3D -->
         <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models@master/2.0/Duck/glTF-Binary/Duck.glb"></a-asset-item>
       </a-assets>
 
-      <!-- Entidad con proyección GPS para el avatar -->
+      <!-- Avatar centrado frente a la cámara -->
       <a-entity
         gltf-model="#avatar"
-        gps-projected-entity-place="latitude: 36.5297; longitude: -6.2925"
-        scale="0.5 0.5 0.5"
-        position="0 0 -5" 
+        gps-entity-place="latitude: 36.5297; longitude: -6.2925"
+        scale="0.3 0.3 0.3" <!-- Escala reducida para mejor visibilidad -->
+        position="0 0 -2" <!-- Más cerca de la cámara -->
+        rotation="0 180 0" <!-- Rotación inicial para orientar el modelo -->
         animation-mixer
-        look-at="[gps-camera]"
       ></a-entity>
 
-      <!-- Cámara con GPS -->
+      <!-- Cubo de prueba para verificar que la escena carga -->
+      <a-box
+        gps-entity-place="latitude: 36.5297; longitude: -6.2925"
+        position="1 0 -2" <!-- A un lado del avatar -->
+        color="red"
+        scale="0.5 0.5 0.5"
+      ></a-box>
+
+      <!-- Cámara optimizada -->
       <a-camera
         gps-camera
         rotation-reader
-        position="0 1.6 0" <!-- Altura de la cámara para simular altura humana -->
+        position="0 1.6 0" <!-- Altura de la cámara -->
         look-controls="enabled: true"
       ></a-camera>
     </a-scene>
+
+    <script>
+      // Ocultar mensaje de carga cuando la escena esté lista
+      AFRAME.registerComponent('hide-on-load', {
+        init: function () {
+          const loadingScreen = document.getElementById('loading');
+          this.el.addEventListener('loaded', () => {
+            loadingScreen.style.display = 'none';
+            console.log('Escena cargada correctamente');
+          });
+        }
+      });
+
+      // Añadir componente a la escena
+      document.querySelector('a-scene').setAttribute('hide-on-load', '');
+
+      // Manejo de errores de geolocalización
+      window.addEventListener('gps-error', (event) => {
+        alert('Error de geolocalización: ' + event.detail.message);
+        console.error('GPS Error:', event.detail);
+      });
+
+      // Confirmar actualización de posición GPS
+      window.addEventListener('gps-camera-update-position', (event) => {
+        console.log('Posición GPS actualizada:', event.detail.position);
+      });
+
+      // Verificar carga del modelo
+      document.querySelector('a-entity[gltf-model]').addEventListener('model-loaded', () => {
+        console.log('Modelo glTF cargado correctamente');
+      });
+      document.querySelector('a-entity[gltf-model]').addEventListener('model-error', (event) => {
+        console.error('Error al cargar el modelo:', event.detail);
+        alert('Error al cargar el modelo glTF');
+      });
+    </script>
   </body>
 </html>
