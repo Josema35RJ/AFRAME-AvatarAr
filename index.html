@@ -2,11 +2,12 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Avatar Frente al Usuario – Ajuste Automático</title>
+  <title>Avatar AR con Marcador Táctil</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 </head>
 <body style="margin:0; overflow:hidden;">
+
   <a-scene embedded arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;" renderer="shadowMapEnabled: true">
 
     <!-- Assets -->
@@ -15,7 +16,7 @@
       <img id="groundTexture" src="https://cdn.pixabay.com/photo/2016/09/02/22/17/grass-1643215_1280.jpg">
     </a-assets>
 
-    <!-- Suelo -->
+    <!-- Suelo de referencia para colocar el avatar -->
     <a-plane id="ground"
              position="0 0 0"
              rotation="-90 0 0"
@@ -23,17 +24,19 @@
              height="10"
              src="#groundTexture"
              repeat="4 4"
-             shadow="receive: true">
+             shadow="receive: true"
+             class="clickable">
     </a-plane>
 
-    <!-- Avatar -->
+    <!-- Avatar inicial oculto -->
     <a-entity id="avatar"
               gltf-model="#avatar"
+              visible="false"
               animation-mixer
               shadow="cast: true">
     </a-entity>
 
-    <!-- Luz -->
+    <!-- Luces -->
     <a-entity light="type: ambient; intensity: 0.6"></a-entity>
     <a-entity light="type: directional; intensity: 1" position="2 4 2" rotation="-45 45 0" shadow="cast: true"></a-entity>
 
@@ -44,35 +47,45 @@
   <script>
     const avatar = document.querySelector('#avatar');
     const camera = document.querySelector('#camera');
+    const scene = document.querySelector('a-scene');
 
     avatar.addEventListener('model-loaded', () => {
-      // 1️⃣ Bounding box del modelo
       const bbox = new THREE.Box3().setFromObject(avatar.object3D);
       const modelHeight = bbox.max.y - bbox.min.y;
-
-      // 2️⃣ Escala automática para altura deseada
       const desiredHeight = 1.8; // metros
       const scale = desiredHeight / modelHeight;
       avatar.object3D.scale.set(scale, scale, scale);
-
-      // 3️⃣ Altura de los pies sobre el suelo
-      avatar.object3D.position.y = -bbox.min.y * scale;
-
-      // 4️⃣ Distancia frente a la cámara para verse completo
-      const factor = 2.0; // ajustar según preferencia
-      const distance = modelHeight * scale * factor;
-      avatar.object3D.position.set(0, avatar.object3D.position.y, -distance);
-
-      // 5️⃣ Mirar siempre a la cámara horizontalmente
-      function lookAtCamera() {
-        const camPos = camera.object3D.position.clone();
-        const avatarPos = avatar.object3D.position.clone();
-        camPos.y = avatarPos.y; // solo horizontal
-        avatar.object3D.lookAt(camPos);
-        requestAnimationFrame(lookAtCamera);
-      }
-      lookAtCamera();
+      avatar.userData.bbox = bbox;
+      avatar.userData.scale = scale;
     });
+
+    // Función para colocar avatar en la posición del clic
+    function placeAvatar(event) {
+      // Obtener la posición del clic en el plano
+      const intersection = scene.components.raycaster.intersectObjects(
+        scene.querySelectorAll('.clickable').map(e => e.object3D)
+      )[0];
+
+      if (!intersection) return;
+
+      const point = intersection.point;
+      const bbox = avatar.userData.bbox;
+      const scale = avatar.userData.scale;
+
+      // Ajustar posición Y para pies sobre el suelo
+      avatar.object3D.position.set(point.x, point.y - bbox.min.y * scale, point.z);
+
+      // Orientar hacia la cámara
+      const lookAt = camera.object3D.position.clone();
+      lookAt.y = avatar.object3D.position.y; // solo horizontal
+      avatar.object3D.lookAt(lookAt);
+
+      // Hacer visible
+      avatar.setAttribute('visible', 'true');
+    }
+
+    // Raycaster para detectar clics/taps en el plano
+    scene.addEventListener('click', placeAvatar);
   </script>
 </body>
 </html>
