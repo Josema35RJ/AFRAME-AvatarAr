@@ -2,56 +2,32 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8">
-    <title>Avatar AR</title>
+    <title>Avatar AR Simulado</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/aframe-extras@6.1.1/dist/aframe-extras.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
   </head>
   <body style="margin: 0; overflow: hidden;">
-    <a-scene
-      xrweb="ar: true; requiredFeatures: hit-test;"
-      embedded
-      renderer="colorManagement: true; physicallyCorrectLights: true"
-      vr-mode-ui="enabled: false"
-      loading-screen="enabled: false"
-    >
+    <a-scene embedded arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
+      
+      <!-- Assets -->
       <a-assets>
         <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
+        <img id="groundTexture" src="https://cdn.pixabay.com/photo/2016/09/02/22/17/grass-1643215_1280.jpg">
       </a-assets>
 
-      <!-- Luz ambiental y direccional -->
-      <a-entity light="type: ambient; intensity: 0.6"></a-entity>
-      <a-entity light="type: directional; intensity: 1" position="2 4 2"></a-entity>
+      <!-- Suelo simulado invisible -->
+      <a-plane id="ground" position="0 0 -2" rotation="-90 0 0" width="10" height="10" visible="false"></a-plane>
 
-      <!-- Avatar -->
-      <a-entity id="avatar" gltf-model="#avatar" scale="0.5 0.5 0.5" rotation="0 0 0" animation-mixer visible="false"></a-entity>
-
-      <!-- Retícula para colocar el avatar en el suelo -->
-      <a-entity id="reticle" visible="false" 
-                geometry="primitive: ring; radiusInner: 0.05; radiusOuter: 0.06"
-                material="color: green; shader: flat"
-                xrweb-hit-test
-                position="0 0 -1">
+      <!-- Avatar colocado sobre el suelo simulado -->
+      <a-entity id="avatar" gltf-model="#avatar"
+                position="0 0 -2"
+                scale="1 1 1"
+                rotation="0 0 0"
+                animation-mixer>
       </a-entity>
+
+      <!-- Cámara -->
+      <a-entity camera></a-entity>
     </a-scene>
-
-    <script>
-      const scene = document.querySelector('a-scene');
-      const avatar = document.querySelector('#avatar');
-      const reticle = document.querySelector('#reticle');
-
-      // Esperar a que WebXR detecte plano
-      scene.addEventListener('xrweb-hit-test-ready', () => {
-        reticle.setAttribute('visible', true);
-      });
-
-      // Colocar avatar cuando el usuario toque la pantalla
-      window.addEventListener('click', () => {
-        if (reticle.object3D.visible) {
-          const position = reticle.object3D.position;
-          avatar.setAttribute('position', position);
-          avatar.setAttribute('visible', true);
-        }
-      });
-    </script>
   </body>
 </html>
