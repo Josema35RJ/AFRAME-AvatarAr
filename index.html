@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Avatar AR Frente al Usuario</title>
+  <title>Avatar Frente al Usuario Ajustado</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 </head>
@@ -49,32 +49,30 @@
     const camera = document.querySelector('#camera');
 
     avatar.addEventListener('model-loaded', () => {
-      // Ajuste automático de escala basado en altura deseada
       const bbox = new THREE.Box3().setFromObject(avatar.object3D);
       const height = bbox.max.y - bbox.min.y;
+
+      // Escala automática
       const desiredHeight = 1.8; // metros
       const scale = desiredHeight / height;
       avatar.object3D.scale.set(scale, scale, scale);
 
-      // Ajuste automático posición Y para que los pies queden sobre el suelo
+      // Altura para pies sobre el suelo
       avatar.object3D.position.y = -bbox.min.y * scale;
 
-      // Posicionar avatar frente a la cámara a distancia segura
+      // Posicionar frente al usuario (X=0, Z=-distancia fija)
       const distance = 2.5; // metros frente a la cámara
-      const cameraDir = new THREE.Vector3();
-      camera.object3D.getWorldDirection(cameraDir);
-      const cameraPos = camera.object3D.position.clone();
-      cameraDir.multiplyScalar(distance);
-      const newPos = cameraPos.clone().add(cameraDir);
-
-      avatar.object3D.position.x = newPos.x;
-      avatar.object3D.position.z = newPos.z;
+      avatar.object3D.position.x = 0;
+      avatar.object3D.position.z = -distance; // siempre delante del usuario
     });
 
     // Mantener avatar mirando a la cámara
     function lookAtCamera() {
-      const cameraPos = camera.object3D.position;
-      avatar.object3D.lookAt(cameraPos);
+      const cameraPos = camera.object3D.position.clone();
+      // Solo X y Z, mantener Y independiente
+      const avatarPos = avatar.object3D.position.clone();
+      avatarPos.y = cameraPos.y; // mirar a la altura de los ojos
+      avatar.object3D.lookAt(cameraPos.x, cameraPos.y, cameraPos.z);
       requestAnimationFrame(lookAtCamera);
     }
     lookAtCamera();
