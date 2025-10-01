@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Avatar Frente al Usuario Ajustado</title>
+  <title>Avatar AR Frente al Usuario Estable</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
 </head>
@@ -29,7 +29,6 @@
     <!-- Avatar -->
     <a-entity id="avatar"
               gltf-model="#avatar"
-              scale="1 1 1"
               rotation="0 180 0"
               animation-mixer
               shadow="cast: true"
@@ -60,19 +59,20 @@
       // Altura para pies sobre el suelo
       avatar.object3D.position.y = -bbox.min.y * scale;
 
-      // Posicionar frente al usuario (X=0, Z=-distancia fija)
-      const distance = 2.5; // metros frente a la cámara
-      avatar.object3D.position.x = 0;
-      avatar.object3D.position.z = -distance; // siempre delante del usuario
+      // Posición fija frente a la cámara en coordenadas absolutas
+      avatar.object3D.position.x = 0; // centrado
+      avatar.object3D.position.z = -3; // 3 metros delante de la cámara
     });
 
-    // Mantener avatar mirando a la cámara
+    // Mirar a la cámara horizontalmente sin subir/bajar la cabeza
     function lookAtCamera() {
-      const cameraPos = camera.object3D.position.clone();
-      // Solo X y Z, mantener Y independiente
       const avatarPos = avatar.object3D.position.clone();
-      avatarPos.y = cameraPos.y; // mirar a la altura de los ojos
-      avatar.object3D.lookAt(cameraPos.x, cameraPos.y, cameraPos.z);
+      const cameraPos = camera.object3D.position.clone();
+
+      // Mantener Y del avatar, mirar solo horizontalmente
+      cameraPos.y = avatarPos.y;
+      avatar.object3D.lookAt(cameraPos);
+
       requestAnimationFrame(lookAtCamera);
     }
     lookAtCamera();
