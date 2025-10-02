@@ -1,17 +1,18 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>Escena AR sin Marcadores con Avatar</title>
+    <title>Escena AR con Avatar Personalizado</title>
     <!-- Incluir A-Frame -->
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-    <!-- Componente para interacción con WebXR -->
+    <!-- Componente para AR (hit-test) -->
     <script>
-      // Registrar componente para manejar hit-test (detección de superficies)
       AFRAME.registerComponent('place-on-surface', {
         init: function () {
           this.el.sceneEl.addEventListener('enter-vr', () => {
             if (this.el.sceneEl.is('ar-mode')) {
               this.el.setAttribute('visible', false); // Ocultar hasta detectar superficie
+            } else {
+              this.el.sceneEl.exitVR(); // Forzar salida de VR
             }
           });
           this.el.sceneEl.addEventListener('exit-vr', () => {
@@ -44,16 +45,32 @@
       vr-mode-ui="enabled: false"
       renderer="colorManagement: true"
     >
-      <!-- Avatar: Esfera como placeholder -->
-      <a-sphere
+      <!-- Assets: Cargar el modelo .glb -->
+      <a-assets>
+        <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
+      </a-assets>
+
+      <!-- Avatar -->
+      <a-entity
+        gltf-model="#avatar"
         place-on-surface
-        position="0 0 0"
-        radius="0.3"
-        color="blue"
-        animation="property: rotation; to: 0 360 0; loop: true; dur: 3000"
-      ></a-sphere>
-      <!-- Cámara -->
-      <a-entity camera></a-entity>
+        position="0 0 -2"
+        rotation="0 0 0"
+        scale="1.2 1.2 1.2"
+        animation-mixer
+        shadow="cast: true"
+      ></a-entity>
+
+      <!-- Cámara frente al avatar -->
+      <a-entity camera position="0 1.6 0.5" look-controls wasd-controls></a-entity>
+
+      <!-- Iluminación -->
+      <a-entity light="type: ambient; intensity: 0.6"></a-entity>
+      <a-entity light="type: directional; intensity: 1" 
+                position="2 4 2" 
+                rotation="-45 45 0" 
+                shadow="cast: true"
+      ></a-entity>
     </a-scene>
   </body>
 </html>
