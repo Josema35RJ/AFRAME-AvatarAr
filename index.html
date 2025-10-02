@@ -4,29 +4,57 @@
   <meta charset="UTF-8">
   <title>Avatar AR Simple y Seguro</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://unpkg.com/aframe-environment-component@1.0.0/dist/aframe-environment-component.min.js"></script>
   <style>
-    body { margin:0; overflow:hidden; }
+    body { margin: 0; overflow: hidden; }
+    #controls {
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 1000;
+    }
+    button {
+      padding: 10px 20px;
+      margin: 0 10px;
+      font-size: 16px;
+    }
     #modal {
-      display:none;
-      position:fixed; top:0; left:0; width:100%; height:100%;
-      background:rgba(0,0,0,0.85); color:white;
-      font-family:Arial, sans-serif; text-align:center;
-      padding-top:20%; z-index:9999;
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.85);
+      color: white;
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 20%;
+      z-index: 9999;
     }
     #modal button {
-      margin-top:20px; padding:10px 20px; font-size:16px;
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
     }
   </style>
 </head>
 <body>
-  <!-- Modal de error -->
+  <!-- Controles -->
+  <div id="controls">
+    <button id="placeAvatar">Colocar Avatar</button>
+    <button id="reset">Reset</button>
+  </div>
+
+  <!-- Modal de error o permisos -->
   <div id="modal">
-    <h2 id="modal-msg">Error</h2>
+    <h2 id="modal-msg">Solicitando permisos...</h2>
     <button onclick="location.reload()">Reintentar</button>
   </div>
 
   <!-- Escena AR -->
-  <a-scene vr-mode-ui="enabled: false" embedded>
+  <a-scene vr-mode-ui="enabled: false" embedded ar>
     <a-assets>
       <video id="cam" autoplay playsinline muted></video>
       <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar/3dpea.com_Salute.glb"></a-asset-item>
@@ -38,42 +66,100 @@
              rotation="0 0 0"
              width="16"
              height="9"
-             material="shader: flat; src: #cam;">
+             material="shader: flat; src: #cam;"
+             visible="false">
     </a-plane>
 
     <!-- Avatar centrado enfrente -->
-    <a-entity gltf-model="#avatar"
+    <a-entity id="avatarEntity"
+              gltf-model="#avatar"
               scale="0.6 0.6 0.6"
               position="0 -1.5 -3"
-              rotation="0 180 0">
+              rotation="0 180 0"
+              visible="false">
     </a-entity>
 
     <a-entity camera look-controls></a-entity>
+    <a-entity environment="preset: forest"></a-entity>
   </a-scene>
 
   <script>
     const video = document.getElementById('cam');
     const modal = document.getElementById('modal');
     const modalMsg = document.getElementById('modal-msg');
+    const camBackground = document.getElementById('camBackground');
+    const avatarEntity = document.getElementById('avatarEntity');
+    const placeBtn = document.getElementById('placeAvatar');
+    const resetBtn = document.getElementById('reset');
+
+    let stream = null;
+    let isAvatarPlaced = false;
 
     function showError(msg) {
       modalMsg.innerText = msg;
       modal.style.display = "block";
     }
 
-    // Comprobar soporte de cámara
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      showError("Tu navegador no soporta acceso a la cámara. Prueba en Chrome, Edge o Safari.");
-    } else {
-      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
-        .then(stream => {
-          video.srcObject = stream;
-        })
-        .catch(err => {
-          showError("No se pudo acceder a la cámara. Revisa permisos o configuración.");
-          console.error(err);
-        });
+    function hideError() {
+      modal.style.display = "none";
     }
+
+    // Solicitar permisos de cámara
+    async function initCamera() {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showError("Tu navegador no soporta acceso a la cámara. Usa Chrome, Edge o Safari.");
+        return;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+        video.srcObject = stream;
+        video.onloadedmetadata = () => {
+          camBackground.setAttribute('visible', true);
+          hideError();
+        };
+      } catch (err) {
+        showError("No se pudo acceder a la cámara. Concede permisos o revisa la configuración.");
+        console.error(err);
+      }
+    }
+
+    // Colocar avatar
+    placeBtn.addEventListener('click', () => {
+      if (!isAvatarPlaced && stream) {
+        avatarEntity.setAttribute('visible', true);
+        isAvatarPlaced = true;
+        placeBtn.disabled = true;
+      }
+    });
+
+    // Resetear escena
+    resetBtn.addEventListener('click', () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        video.srcObject = null;
+        camBackground.setAttribute('visible', false);
+        avatarEntity.setAttribute('visible', false);
+        isAvatarPlaced = false;
+        placeBtn.disabled = false;
+        initCamera();
+      }
+    });
+
+    // Inicialización
+    document.addEventListener('DOMContentLoaded', () => {
+      modalMsg.innerText = "Solicitando permisos de cámara...";
+      initCamera();
+
+      // Verificar carga del modelo
+      const avatarAsset = document.getElementById('avatar');
+      avatarAsset.addEventListener('load', () => {
+        console.log('Modelo 3D cargado correctamente');
+      });
+      avatarAsset.addEventListener('error', () => {
+        showError('Error al cargar el modelo 3D. Revisa la conexión o la URL.');
+      });
+    });
   </script>
 </body>
 </html>
