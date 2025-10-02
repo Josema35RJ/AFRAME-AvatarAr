@@ -56,10 +56,12 @@
     <button onclick="location.reload()">Reintentar</button>
   </div>
 
+  <!-- Video de cámara fuera de a-assets para evitar warnings de preload -->
+  <video id="cam" autoplay playsinline muted crossorigin="anonymous" style="display:none;"></video>
+
   <!-- Escena AR -->
-  <a-scene vr-mode-ui="enabled: false" embedded ar timeout="10000">
+  <a-scene vr-mode-ui="enabled: false" embedded ar timeout="15000">
     <a-assets>
-      <video id="cam" autoplay playsinline muted crossorigin="anonymous"></video>
       <a-asset-item id="avatar" src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb" crossorigin="anonymous"></a-asset-item>
     </a-assets>
 
@@ -108,39 +110,67 @@
       modal.style.display = "none";
     }
 
-    // Solicitar permisos de cámara
+    // Esperar a que el video esté completamente listo para textura
+    function waitForVideoReady() {
+      return new Promise((resolve, reject) => {
+        const checkReady = () => {
+          if (video.readyState >= 2) {  // HAVE_CURRENT_DATA o superior
+            console.log('Video listo para textura (readyState:', video.readyState, ')');
+            resolve();
+          } else {
+            setTimeout(checkReady, 100);  // Poll cada 100ms
+          }
+        };
+        video.addEventListener('loadeddata', checkReady, { once: true });
+        video.addEventListener('error', reject, { once: true });
+        checkReady();  // Inicia el poll
+      });
+    }
+
+    // Solicitar permisos de cámara con fallback a cámara frontal si falla la trasera
     async function initCamera() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         showModal("Navegador no soporta cámara. Usa Chrome/Edge/Safari.");
         return;
       }
 
+      let facingMode = { ideal: "environment" };  // Intenta trasera primero
+
       try {
-        showModal("Solicitando permisos de cámara...");
+        showModal("Solicitando permisos de cámara (trasera)...");
         stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: { ideal: "environment" } }, 
+          video: { facingMode: facingMode }, 
           audio: false 
         });
-        video.srcObject = stream;
-        
-        // Esperar a que el video esté listo
-        await new Promise((resolve, reject) => {
-          video.addEventListener('loadeddata', resolve, { once: true });
-          video.addEventListener('error', reject, { once: true });
-          video.play().catch(reject);
-        });
-
-        if (video.readyState >= 2) {
-          camBackground.setAttribute('visible', true);
-          isCameraReady = true;
-          placeBtn.disabled = !isModelLoaded;
-          hideModal();
-          console.log('Cámara lista');
-        } else {
-          throw new Error('Video no listo');
-        }
       } catch (err) {
-        showModal(`Error en cámara: ${err.message}. Concede permisos y reintenta.`);
+        console.warn('Fallo en cámara trasera:', err);
+        showModal("Intentando cámara frontal...");
+        facingMode = { ideal: "user" };
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ 
+            video: { facingMode: facingMode }, 
+            audio: false 
+          });
+        } catch (fallbackErr) {
+          showModal(`Error en cámara: ${fallbackErr.message}. Concede permisos y reintenta.`);
+          console.error(fallbackErr);
+          return;
+        }
+      }
+
+      try {
+        video.srcObject = stream;
+        video.play().catch(e => console.error('Play error:', e));
+
+        // Esperar loadeddata + readyState
+        await waitForVideoReady();
+        camBackground.setAttribute('visible', true);
+        isCameraReady = true;
+        if (isModelLoaded) placeBtn.disabled = false;
+        hideModal();
+        console.log('Cámara AR activa');
+      } catch (err) {
+        showModal(`Error al inicializar video: ${err.message}`);
         console.error(err);
       }
     }
@@ -148,14 +178,13 @@
     // Evento para modelo cargado
     avatarEntity.addEventListener('model-loaded', () => {
       isModelLoaded = true;
-      if (isCameraReady) {
-        placeBtn.disabled = false;
-      }
       console.log('Modelo 3D cargado');
+      if (isCameraReady) placeBtn.disabled = false;
     });
 
-    avatarEntity.addEventListener('model-error', () => {
-      showModal('Error cargando modelo 3D. Revisa conexión.');
+    avatarEntity.addEventListener('model-error', (evt) => {
+      showModal('Error cargando modelo 3D: ' + evt.detail.message);
+      console.error('Model error:', evt.detail);
     });
 
     // Colocar avatar
@@ -164,7 +193,7 @@
         avatarEntity.setAttribute('visible', true);
         isAvatarPlaced = true;
         placeBtn.disabled = true;
-        console.log('Avatar colocado');
+        console.log('Avatar colocado en AR');
       }
     });
 
@@ -180,29 +209,35 @@
       isCameraReady = false;
       isModelLoaded = false;
       placeBtn.disabled = true;
-      initCamera();
+      showModal('Reiniciando...');
+      setTimeout(initCamera, 500);  // Pequeño delay para cleanup
     });
 
-    // Inicialización y fix Three.js
-    document.addEventListener('DOMContentLoaded', () => {
+    // Inicialización: Cámara primero, luego escena
+    document.addEventListener('DOMContentLoaded', async () => {
       showModal('Cargando escena AR...');
-      initCamera();
-
+      
+      // Fijar lights deprecated antes de render
       const sceneEl = document.querySelector('a-scene');
       sceneEl.addEventListener('loaded', () => {
-        // Fix useLegacyLights deprecated
-        const renderer = sceneEl.renderer.el.renderer;
-        if (renderer && renderer.useLegacyLights !== undefined) {
-          renderer.useLegacyLights = true;  // Compatibilidad legacy
-          console.log('Three.js legacy lights activado');
+        const renderer = sceneEl.renderer;
+        if (renderer) {
+          renderer.physicallyCorrectLights = false;  // Fix para useLegacyLights deprecated
+          console.log('Lights legacy fix aplicado');
         }
       });
 
-      // Manejo de errores globales de assets
+      // Manejo global de errores
       sceneEl.addEventListener('componenterror', (evt) => {
-        console.error('Error en componente:', evt.detail);
-        showModal(`Error: ${evt.detail.componentName}. Revisa consola.`);
+        console.error('Error componente:', evt.detail);
+        if (!isCameraReady) showModal(`Error: ${evt.detail.componentName}`);
       });
+
+      // Iniciar cámara inmediatamente
+      await initCamera();
+      
+      // Forzar update de escena
+      sceneEl.flushToDOM(true);
     });
   </script>
 </body>
