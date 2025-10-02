@@ -1,91 +1,72 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
   <head>
-    <title>Escena AR con Avatar</title>
+    <meta charset="UTF-8">
+    <title>Avatar AR</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
     <script>
       AFRAME.registerComponent('place-on-surface', {
         init: function () {
-          const el = this.el;
-          const scene = this.el.sceneEl;
-
-          // Verificar WebXR y forzar AR con manejo de permisos
-          if ('xr' in navigator) {
-            console.log('WebXR detectado, intentando iniciar AR');
-            navigator.permissions.query({ name: 'camera' }).then(permission => {
-              if (permission.state === 'granted') {
-                scene.enterAR().then(() => {
-                  console.log('Modo AR activado con éxito');
-                  el.setAttribute('visible', false); // Ocultar hasta detectar superficie
-                }).catch(err => {
-                  console.error('Error al entrar en AR:', err.message);
-                });
-              } else {
-                console.error('Permiso de cámara no otorgado, revisa los ajustes');
-                alert('Por favor, otorga permiso a la cámara en los ajustes del navegador.');
-              }
-            });
-          } else {
-            console.error('WebXR no soportado');
-            alert('Tu navegador no soporta WebXR. Usa Chrome en Android.');
-          }
-
-          scene.addEventListener('enter-ar', () => {
-            console.log('Modo AR iniciado');
-          });
-
-          scene.addEventListener('exit-ar', () => {
-            el.setAttribute('visible', false);
-            console.log('Saliendo de modo AR');
-          });
+          // Inicialmente oculto hasta detectar superficie
+          this.el.setAttribute('visible', false);
         },
         tick: function () {
-          if (this.el.sceneEl.is('ar-mode')) {
-            const hitTest = this.el.sceneEl.systems['webxr'].hitTestSource;
-            if (hitTest) {
-              hitTest.getHitTestResults().then(results => {
-                if (results.length > 0) {
-                  const hit = results[0];
-                  const pose = hit.getPose(this.el.sceneEl.renderer.xr.getReferenceSpace());
-                  if (pose) {
-                    this.el.setAttribute('position', {
-                      x: pose.transform.position.x,
-                      y: pose.transform.position.y + 0.5,
-                      z: pose.transform.position.z
-                    });
-                    this.el.setAttribute('visible', true);
-                  }
-                } else {
-                  this.el.setAttribute('visible', false);
-                }
-              });
-            }
+          const scene = this.el.sceneEl;
+
+          // Solo activo en modo AR
+          if (!scene.is('ar-mode')) return;
+
+          const xrSystem = scene.systems.webxr;
+          if (!xrSystem.hitTestSource) return;
+
+          const hitTestResults = xrSystem.hitTestSource.getHitTestResults();
+          if (!hitTestResults || hitTestResults.length === 0) {
+            this.el.setAttribute('visible', false);
+            return;
+          }
+
+          const hit = hitTestResults[0];
+          const pose = hit.getPose(scene.renderer.xr.getReferenceSpace());
+          if (pose) {
+            this.el.setAttribute('position', {
+              x: pose.transform.position.x,
+              y: pose.transform.position.y,
+              z: pose.transform.position.z
+            });
+            this.el.setAttribute('visible', true);
           }
         }
       });
     </script>
   </head>
-  <body>
+
+  <body style="margin: 0; overflow: hidden;">
     <a-scene
-      webxr="requiredFeatures: hit-test"
-      vr-mode-ui="enabled: false"
+      xrweb="requiredFeatures: hit-test"
+      ar-mode-ui="enabled: true"
       renderer="colorManagement: true"
     >
       <a-assets>
         <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
       </a-assets>
 
+      <!-- Avatar que se colocará sobre la superficie -->
       <a-entity
         gltf-model="#avatar"
         place-on-surface
-        rotation="0 0 0"
         scale="1.2 1.2 1.2"
+        rotation="0 0 0"
+        position="0 -10 0"
         animation-mixer
       ></a-entity>
 
+      <!-- Cámara -->
       <a-entity camera position="0 1.6 0.5" look-controls></a-entity>
 
-      <a-entity light="type: ambient; intensity: 0.6"></a-entity>
+      <!-- Luz ambiental -->
+      <a-entity light="type: ambient; intensity: 0.8"></a-entity>
+      <a-entity light="type: directional; intensity: 0.6" position="0 4 0"></a-entity>
     </a-scene>
   </body>
 </html>
