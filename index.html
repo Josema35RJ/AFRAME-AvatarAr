@@ -2,35 +2,35 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Avatar AR PRO</title>
+  <title>Avatar AR GitHub Pages</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+
   <script>
-    AFRAME.registerComponent('ar-pro-placer', {
+    AFRAME.registerComponent('ar-placer', {
       schema: {
-        autoPlace: {type: 'boolean', default: true},
-        smoothing: {type: 'number', default: 0.1} // factor de suavizado
+        smoothing: { type: 'number', default: 0.1 }
       },
       init: function () {
         const el = this.el;
         el.setAttribute('visible', false);
 
         const scene = el.sceneEl;
-        const reticle = document.querySelector('#reticleEntity');
+        const reticle = document.querySelector('#reticle');
 
         let placed = false;
         this.currentPosition = new THREE.Vector3();
         this.currentQuaternion = new THREE.Quaternion();
 
-        // Modo fallback para escritorio
+        // Fallback para escritorio
         if (!navigator.xr) {
-          console.warn("AR no soportado, usando fallback 3D");
-          el.setAttribute('position', '0 0 -2'); // 2m frente a cámara
+          console.warn("AR no soportado, mostrando fallback 3D");
+          el.setAttribute('position', '0 0 -2'); // 2m frente a la cámara
           el.setAttribute('visible', true);
           reticle.setAttribute('visible', false);
           return;
         }
 
-        // Mantener avatar frente a cámara antes de colocar
+        // Mantener avatar frente a cámara antes de colocarlo
         this.tick = (time, delta) => {
           if (placed) return;
           const cam = scene.camera.el;
@@ -44,12 +44,12 @@
           el.object3D.visible = true;
         };
 
-        // Hit-test
+        // Hit-test AR
         scene.addEventListener('ar-hit-test', (event) => {
           const pose = event.detail.pose;
           if (!pose) return;
 
-          // Reticle
+          // Reticle guía
           reticle.object3D.position.set(
             pose.transform.position.x,
             pose.transform.position.y,
@@ -57,14 +57,14 @@
           );
           reticle.object3D.visible = true;
 
-          if (!placed && this.data.autoPlace) {
+          // Auto colocar avatar si no está colocado
+          if (!placed) {
             this.currentPosition.lerp(new THREE.Vector3(
               pose.transform.position.x,
               pose.transform.position.y,
               pose.transform.position.z
             ), this.data.smoothing);
             el.object3D.position.copy(this.currentPosition);
-            el.object3D.visible = true;
 
             // Suavizado de rotación
             const targetQuat = new THREE.Quaternion().setFromRotationMatrix(
@@ -72,6 +72,7 @@
             );
             el.object3D.quaternion.slerp(targetQuat, this.data.smoothing);
 
+            el.object3D.visible = true;
             placed = true;
           }
         });
@@ -103,13 +104,13 @@
   >
     <a-assets>
       <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
-      <a-asset-item id="reticle" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/reticle.glb"></a-asset-item>
+      <a-asset-item id="reticleAsset" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/reticle.glb"></a-asset-item>
     </a-assets>
 
     <!-- Reticle guía -->
     <a-entity
-      id="reticleEntity"
-      gltf-model="#reticle"
+      id="reticle"
+      gltf-model="#reticleAsset"
       scale="0.2 0.2 0.2"
       position="0 -10 0"
       visible="false"
@@ -119,7 +120,7 @@
     <!-- Avatar animado -->
     <a-entity
       gltf-model="#avatar"
-      ar-pro-placer="autoPlace: true; smoothing: 0.1"
+      ar-placer="smoothing: 0.1"
       scale="1.2 1.2 1.2"
       rotation="0 0 0"
       animation-mixer
