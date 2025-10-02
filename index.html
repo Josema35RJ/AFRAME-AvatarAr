@@ -1,244 +1,31 @@
 <!DOCTYPE html>
-<html lang="es">
-<head>
-  <meta charset="UTF-8">
-  <title>Avatar AR Simple y Seguro</title>
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <style>
-    body { margin: 0; overflow: hidden; }
-    #controls {
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      z-index: 1000;
-    }
-    button {
-      padding: 10px 20px;
-      margin: 0 10px;
-      font-size: 16px;
-    }
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    #modal {
-      display: none;
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0,0,0,0.85);
-      color: white;
-      font-family: Arial, sans-serif;
-      text-align: center;
-      padding-top: 20%;
-      z-index: 9999;
-    }
-    #modal button {
-      margin-top: 20px;
-      padding: 10px 20px;
-      font-size: 16px;
-    }
-  </style>
-</head>
-<body>
-  <!-- Controles -->
-  <div id="controls">
-    <button id="placeAvatar" disabled>Colocar Avatar</button>
-    <button id="reset">Reset</button>
-  </div>
+<html>
+  <head>
+    <title>Escena AR con Avatar</title>
+    <!-- Incluir A-Frame -->
+    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <!-- Incluir AR.js -->
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+  </head>
+  <body>
+    <!-- Escena A-Frame -->
+    <a-scene
+      vr-mode-ui="enabled: false"
+      arjs="sourceType: webcam; debugUIEnabled: false;"
+    >
+      <!-- Marcador AR (Hiro por defecto) -->
+      <a-marker preset="hiro">
+        <!-- Avatar: Esfera animada como ejemplo -->
+        <a-sphere
+          position="0 0.5 0"
+          radius="0.5"
+          color="blue"
+          animation="property: rotation; to: 0 360 0; loop: true; dur: 3000"
+        ></a-sphere>
+      </a-marker>
 
-  <!-- Modal de error o permisos -->
-  <div id="modal">
-    <h2 id="modal-msg">Iniciando AR...</h2>
-    <button onclick="location.reload()">Reintentar</button>
-  </div>
-
-  <!-- Video de cámara fuera de a-assets para evitar warnings de preload -->
-  <video id="cam" autoplay playsinline muted crossorigin="anonymous" style="display:none;"></video>
-
-  <!-- Escena AR -->
-  <a-scene vr-mode-ui="enabled: false" embedded ar timeout="15000">
-    <a-assets>
-      <a-asset-item id="avatar" src="https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Duck/glTF-Binary/Duck.glb" crossorigin="anonymous"></a-asset-item>
-    </a-assets>
-
-    <!-- Fondo con cámara -->
-    <a-plane id="camBackground"
-             position="0 1.6 -5"
-             rotation="0 0 0"
-             width="16"
-             height="9"
-             material="shader: flat; src: #cam;"
-             visible="false">
-    </a-plane>
-
-    <!-- Avatar centrado enfrente -->
-    <a-entity id="avatarEntity"
-              gltf-model="#avatar"
-              scale="0.5 0.5 0.5"
-              position="0 0 -3"
-              rotation="0 0 0"
-              visible="false">
-    </a-entity>
-
-    <a-entity camera look-controls></a-entity>
-  </a-scene>
-
-  <script>
-    const video = document.getElementById('cam');
-    const modal = document.getElementById('modal');
-    const modalMsg = document.getElementById('modal-msg');
-    const camBackground = document.getElementById('camBackground');
-    const avatarEntity = document.getElementById('avatarEntity');
-    const placeBtn = document.getElementById('placeAvatar');
-    const resetBtn = document.getElementById('reset');
-
-    let stream = null;
-    let isAvatarPlaced = false;
-    let isCameraReady = false;
-    let isModelLoaded = false;
-
-    function showModal(msg) {
-      modalMsg.innerText = msg;
-      modal.style.display = "block";
-    }
-
-    function hideModal() {
-      modal.style.display = "none";
-    }
-
-    // Esperar a que el video esté completamente listo para textura
-    function waitForVideoReady() {
-      return new Promise((resolve, reject) => {
-        const checkReady = () => {
-          if (video.readyState >= 2) {  // HAVE_CURRENT_DATA o superior
-            console.log('Video listo para textura (readyState:', video.readyState, ')');
-            resolve();
-          } else {
-            setTimeout(checkReady, 100);  // Poll cada 100ms
-          }
-        };
-        video.addEventListener('loadeddata', checkReady, { once: true });
-        video.addEventListener('error', reject, { once: true });
-        checkReady();  // Inicia el poll
-      });
-    }
-
-    // Solicitar permisos de cámara con fallback a cámara frontal si falla la trasera
-    async function initCamera() {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showModal("Navegador no soporta cámara. Usa Chrome/Edge/Safari.");
-        return;
-      }
-
-      let facingMode = { ideal: "environment" };  // Intenta trasera primero
-
-      try {
-        showModal("Solicitando permisos de cámara (trasera)...");
-        stream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: facingMode }, 
-          audio: false 
-        });
-      } catch (err) {
-        console.warn('Fallo en cámara trasera:', err);
-        showModal("Intentando cámara frontal...");
-        facingMode = { ideal: "user" };
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({ 
-            video: { facingMode: facingMode }, 
-            audio: false 
-          });
-        } catch (fallbackErr) {
-          showModal(`Error en cámara: ${fallbackErr.message}. Concede permisos y reintenta.`);
-          console.error(fallbackErr);
-          return;
-        }
-      }
-
-      try {
-        video.srcObject = stream;
-        video.play().catch(e => console.error('Play error:', e));
-
-        // Esperar loadeddata + readyState
-        await waitForVideoReady();
-        camBackground.setAttribute('visible', true);
-        isCameraReady = true;
-        if (isModelLoaded) placeBtn.disabled = false;
-        hideModal();
-        console.log('Cámara AR activa');
-      } catch (err) {
-        showModal(`Error al inicializar video: ${err.message}`);
-        console.error(err);
-      }
-    }
-
-    // Evento para modelo cargado
-    avatarEntity.addEventListener('model-loaded', () => {
-      isModelLoaded = true;
-      console.log('Modelo 3D cargado');
-      if (isCameraReady) placeBtn.disabled = false;
-    });
-
-    avatarEntity.addEventListener('model-error', (evt) => {
-      showModal('Error cargando modelo 3D: ' + evt.detail.message);
-      console.error('Model error:', evt.detail);
-    });
-
-    // Colocar avatar
-    placeBtn.addEventListener('click', () => {
-      if (isCameraReady && isModelLoaded && !isAvatarPlaced) {
-        avatarEntity.setAttribute('visible', true);
-        isAvatarPlaced = true;
-        placeBtn.disabled = true;
-        console.log('Avatar colocado en AR');
-      }
-    });
-
-    // Resetear
-    resetBtn.addEventListener('click', () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-      }
-      video.srcObject = null;
-      camBackground.setAttribute('visible', false);
-      avatarEntity.setAttribute('visible', false);
-      isAvatarPlaced = false;
-      isCameraReady = false;
-      isModelLoaded = false;
-      placeBtn.disabled = true;
-      showModal('Reiniciando...');
-      setTimeout(initCamera, 500);  // Pequeño delay para cleanup
-    });
-
-    // Inicialización: Cámara primero, luego escena
-    document.addEventListener('DOMContentLoaded', async () => {
-      showModal('Cargando escena AR...');
-      
-      // Fijar lights deprecated antes de render
-      const sceneEl = document.querySelector('a-scene');
-      sceneEl.addEventListener('loaded', () => {
-        const renderer = sceneEl.renderer;
-        if (renderer) {
-          renderer.physicallyCorrectLights = false;  // Fix para useLegacyLights deprecated
-          console.log('Lights legacy fix aplicado');
-        }
-      });
-
-      // Manejo global de errores
-      sceneEl.addEventListener('componenterror', (evt) => {
-        console.error('Error componente:', evt.detail);
-        if (!isCameraReady) showModal(`Error: ${evt.detail.componentName}`);
-      });
-
-      // Iniciar cámara inmediatamente
-      await initCamera();
-      
-      // Forzar update de escena
-      sceneEl.flushToDOM(true);
-    });
-  </script>
-</body>
+      <!-- Cámara para AR -->
+      <a-entity camera></a-entity>
+    </a-scene>
+  </body>
 </html>
