@@ -2,90 +2,137 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Avatar AR Funcional</title>
+  <title>Avatar AR PRO</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script>
-    AFRAME.registerComponent('place-on-hit', {
+    AFRAME.registerComponent('ar-pro-placer', {
+      schema: {
+        autoPlace: {type: 'boolean', default: true},
+        smoothing: {type: 'number', default: 0.1} // factor de suavizado
+      },
       init: function () {
         const el = this.el;
-        // Oculto al inicio
         el.setAttribute('visible', false);
 
         const scene = el.sceneEl;
+        const reticle = document.querySelector('#reticleEntity');
 
-        // Listener para hit-test AR
+        let placed = false;
+        this.currentPosition = new THREE.Vector3();
+        this.currentQuaternion = new THREE.Quaternion();
+
+        // Modo fallback para escritorio
+        if (!navigator.xr) {
+          console.warn("AR no soportado, usando fallback 3D");
+          el.setAttribute('position', '0 0 -2'); // 2m frente a cámara
+          el.setAttribute('visible', true);
+          reticle.setAttribute('visible', false);
+          return;
+        }
+
+        // Mantener avatar frente a cámara antes de colocar
+        this.tick = (time, delta) => {
+          if (placed) return;
+          const cam = scene.camera.el;
+          if (!cam) return;
+          const camPos = cam.object3D.position.clone();
+          const forward = new THREE.Vector3(0,0,-1).applyQuaternion(cam.object3D.quaternion);
+          const targetPos = camPos.add(forward.multiplyScalar(1.2));
+          targetPos.y -= 0.5;
+          this.currentPosition.lerp(targetPos, this.data.smoothing);
+          el.object3D.position.copy(this.currentPosition);
+          el.object3D.visible = true;
+        };
+
+        // Hit-test
         scene.addEventListener('ar-hit-test', (event) => {
           const pose = event.detail.pose;
           if (!pose) return;
 
-          // Colocar avatar sobre la superficie detectada
-          el.setAttribute('position', {
-            x: pose.transform.position.x,
-            y: pose.transform.position.y,
-            z: pose.transform.position.z
-          });
-          el.setAttribute('visible', true);
+          // Reticle
+          reticle.object3D.position.set(
+            pose.transform.position.x,
+            pose.transform.position.y,
+            pose.transform.position.z
+          );
+          reticle.object3D.visible = true;
+
+          if (!placed && this.data.autoPlace) {
+            this.currentPosition.lerp(new THREE.Vector3(
+              pose.transform.position.x,
+              pose.transform.position.y,
+              pose.transform.position.z
+            ), this.data.smoothing);
+            el.object3D.position.copy(this.currentPosition);
+            el.object3D.visible = true;
+
+            // Suavizado de rotación
+            const targetQuat = new THREE.Quaternion().setFromRotationMatrix(
+              new THREE.Matrix4().fromArray(pose.transform.matrix)
+            );
+            el.object3D.quaternion.slerp(targetQuat, this.data.smoothing);
+
+            placed = true;
+          }
+        });
+
+        // Colocación manual con toque
+        scene.addEventListener('select', () => {
+          if (placed) return;
+          const pos = reticle.object3D.position.clone();
+          this.currentPosition.lerp(pos, this.data.smoothing);
+          el.object3D.position.copy(this.currentPosition);
+          el.object3D.visible = true;
+          placed = true;
         });
       }
     });
   </script>
+
   <style>
-    body { margin: 0; overflow: hidden; }
+    body { margin:0; overflow:hidden; }
   </style>
 </head>
+
 <body>
   <a-scene
     xrweb="requiredFeatures: hit-test"
     ar-mode-ui="enabled: true"
-    renderer="colorManagement: true"
+    renderer="colorManagement: true; physicallyCorrectLights: true"
+    shadow="type: pcfsoft"
   >
     <a-assets>
       <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
       <a-asset-item id="reticle" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/reticle.glb"></a-asset-item>
     </a-assets>
 
-    <!-- Guía visual para la superficie (reticle) -->
+    <!-- Reticle guía -->
     <a-entity
       id="reticleEntity"
       gltf-model="#reticle"
       scale="0.2 0.2 0.2"
       position="0 -10 0"
+      visible="false"
+      shadow="cast: false; receive: false"
     ></a-entity>
 
     <!-- Avatar animado -->
     <a-entity
       gltf-model="#avatar"
-      place-on-hit
+      ar-pro-placer="autoPlace: true; smoothing: 0.1"
       scale="1.2 1.2 1.2"
       rotation="0 0 0"
       animation-mixer
+      shadow="cast: true; receive: true"
       position="0 -10 0"
     ></a-entity>
 
     <!-- Cámara -->
     <a-entity camera position="0 1.6 0.5" look-controls></a-entity>
 
-    <!-- Iluminación -->
-    <a-entity light="type: ambient; intensity: 0.8"></a-entity>
-    <a-entity light="type: directional; intensity: 0.6" position="0 4 0"></a-entity>
+    <!-- Luces -->
+    <a-entity light="type: ambient; intensity: 0.6; color: #ffffff"></a-entity>
+    <a-entity light="type: directional; intensity: 0.8; position: 0 4 2" rotation="-45 0 0" castShadow="true"></a-entity>
   </a-scene>
-
-  <script>
-    // Mover el reticle a la posición del hit-test
-    const scene = document.querySelector('a-scene');
-    const reticle = document.querySelector('#reticleEntity');
-
-    scene.addEventListener('ar-hit-test', (event) => {
-      const pose = event.detail.pose;
-      if (!pose) return;
-      reticle.setAttribute('position', {
-        x: pose.transform.position.x,
-        y: pose.transform.position.y,
-        z: pose.transform.position.z
-      });
-      reticle.setAttribute('visible', true);
-    });
-  </script>
 </body>
 </html>
-
