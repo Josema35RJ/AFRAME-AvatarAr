@@ -1,67 +1,78 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8">
-  <title>Avatar AR Profesional</title>
+  <meta charset="UTF-8">
+  <title>Avatar AR Simple y Seguro</title>
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <style>
+    body { margin:0; overflow:hidden; }
+    #modal {
+      display:none;
+      position:fixed; top:0; left:0; width:100%; height:100%;
+      background:rgba(0,0,0,0.85); color:white;
+      font-family:Arial, sans-serif; text-align:center;
+      padding-top:20%; z-index:9999;
+    }
+    #modal button {
+      margin-top:20px; padding:10px 20px; font-size:16px;
+    }
+  </style>
 </head>
-<body style="margin:0; overflow:hidden;">
-
-  <!-- Escena AR con WebXR -->
-  <a-scene
-    vr-mode-ui="enabled: false"
-    embedded
-    renderer="colorManagement: true; physicallyCorrectLights: true"
-    webxr="requiredFeatures: hit-test; optionalFeatures: dom-overlay,local-floor; overlayElement: #overlay">
-
-    <!-- Assets -->
-    <a-assets>
-      <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
-    </a-assets>
-
-    <!-- Avatar (se coloca con script) -->
-    <a-entity id="avatar"
-              gltf-model="#avatarModel"
-              scale="0.5 0.5 0.5"
-              visible="false">
-    </a-entity>
-
-    <!-- Luces -->
-    <a-entity light="type: ambient; intensity: 1"></a-entity>
-    <a-entity light="type: directional; intensity: 0.8" position="0 4 4"></a-entity>
-
-    <!-- Cámara -->
-    <a-entity id="camera" camera look-controls></a-entity>
-  </a-scene>
-
-  <!-- Interfaz de botones -->
-  <div id="overlay" style="position:absolute; bottom:20px; width:100%; text-align:center; z-index:999;">
-    <button onclick="colocarAvatar()" style="padding:10px 20px; margin:5px; font-size:16px;">📍 Colocar Avatar</button>
-    <button onclick="resetAvatar()" style="padding:10px 20px; margin:5px; font-size:16px;">🔄 Reset</button>
+<body>
+  <!-- Modal de error -->
+  <div id="modal">
+    <h2 id="modal-msg">Error</h2>
+    <button onclick="location.reload()">Reintentar</button>
   </div>
 
+  <!-- Escena AR -->
+  <a-scene vr-mode-ui="enabled: false" embedded>
+    <a-assets>
+      <video id="cam" autoplay playsinline muted></video>
+      <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar/3dpea.com_Salute.glb"></a-asset-item>
+    </a-assets>
+
+    <!-- Fondo con cámara -->
+    <a-plane id="camBackground"
+             position="0 1.6 -5"
+             rotation="0 0 0"
+             width="16"
+             height="9"
+             material="shader: flat; src: #cam;">
+    </a-plane>
+
+    <!-- Avatar centrado enfrente -->
+    <a-entity gltf-model="#avatar"
+              scale="0.6 0.6 0.6"
+              position="0 -1.5 -3"
+              rotation="0 180 0">
+    </a-entity>
+
+    <a-entity camera look-controls></a-entity>
+  </a-scene>
+
   <script>
-    const avatar = document.getElementById("avatar");
-    const camera = document.getElementById("camera");
+    const video = document.getElementById('cam');
+    const modal = document.getElementById('modal');
+    const modalMsg = document.getElementById('modal-msg');
 
-    // Colocar avatar en frente de la cámara
-    function colocarAvatar() {
-      const camPos = camera.object3D.position;
-      const camDir = new THREE.Vector3();
-      camera.object3D.getWorldDirection(camDir);
-
-      // Distancia fija al frente (2 metros)
-      const distance = 2.0;
-      const newPos = camPos.clone().add(camDir.multiplyScalar(distance));
-
-      avatar.setAttribute("position", `${newPos.x} ${newPos.y - 1.5} ${newPos.z}`);
-      avatar.object3D.lookAt(camPos); // Que mire hacia el usuario
-      avatar.setAttribute("visible", "true");
+    function showError(msg) {
+      modalMsg.innerText = msg;
+      modal.style.display = "block";
     }
 
-    // Resetear avatar
-    function resetAvatar() {
-      avatar.setAttribute("visible", "false");
+    // Comprobar soporte de cámara
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showError("Tu navegador no soporta acceso a la cámara. Prueba en Chrome, Edge o Safari.");
+    } else {
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false })
+        .then(stream => {
+          video.srcObject = stream;
+        })
+        .catch(err => {
+          showError("No se pudo acceder a la cámara. Revisa permisos o configuración.");
+          console.error(err);
+        });
     }
   </script>
 </body>
