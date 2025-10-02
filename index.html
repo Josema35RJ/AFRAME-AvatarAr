@@ -1,309 +1,309 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover" />
-  <title>Avatar AR — Colocar con dedo/ratón (robusto)</title>
-
-  <!-- A-Frame + AR.js -->
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js/aframe/build/aframe-ar.js"></script>
-
+  <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+  <title>AR Avatar — WebXR + fallback model-viewer</title>
   <style>
-    html,body { height:100%; margin:0; background:#000; touch-action:none; -ms-touch-action:none; }
-    #ui {
-      position: absolute; left: 12px; top: 12px; z-index: 10; color: #fff;
-      font-family: system-ui, Arial; font-size:14px; background: rgba(0,0,0,0.35);
-      padding: 8px 10px; border-radius: 8px;
-    }
-    #status { margin-top:6px; color:#ffd; font-size:13px; }
-    button { margin-right:6px; padding:6px 8px; border-radius:6px; border:0; background:#1e90ff; color:#fff; cursor:pointer; }
-    button.secondary { background:#666; }
+    body { margin:0; overflow:hidden; font-family:system-ui,Segoe UI,Roboto; background:#000; color:#fff;}
+    #ui { position:absolute; left:12px; top:12px; z-index:10; background:rgba(0,0,0,0.45); padding:8px 10px; border-radius:8px;}
+    button { margin:4px 6px 0 0; padding:8px 10px; border-radius:6px; border:0; background:#1e90ff; color:#fff; cursor:pointer;}
+    #status { margin-top:6px; font-size:13px; color:#ffd; }
+    a[slot="ar-button"] { display:none; } /* ARButton will be added to DOM */
+    /* model-viewer fallback container hidden until needed */
+    #mvContainer { position:absolute; right:12px; top:12px; z-index:10; }
   </style>
 </head>
 <body>
 
-  <div id="ui">
-    <strong>Avatar AR — colocar con dedo/ratón</strong><br>
-    <small>Mueve el reticle (arrastra) y toca / haz click para colocar.</small>
-    <div style="margin-top:6px;">
-      <button id="btnPlace">Colocar ahora</button>
-      <button id="btnReset" class="secondary">Reset</button>
-      <button id="btnCenter" class="secondary">Centrar reticle</button>
-    </div>
-    <div id="status">Cargando...</div>
+<div id="ui">
+  <strong>Avatar AR — prueba</strong><br>
+  <small>Mueve el teléfono, toca la pantalla para colocar.</small>
+  <div id="status">Inicializando…</div>
+  <div style="margin-top:8px;">
+    <button id="btnCenter">Centrar reticle</button>
+    <button id="btnReset">Reset avatar</button>
   </div>
+</div>
 
-  <a-scene embedded
-           arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
-           renderer="shadowMapEnabled: true; antialias: true">
+<div id="mvContainer"></div>
 
-    <a-assets>
-      <!-- sustituye por tu GLB si quieres -->
-      <a-asset-item id="avatarModel" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
+<script type="module">
+import * as THREE from 'https://unpkg.com/three@0.152.2/build/three.module.js';
+import { GLTFLoader } from 'https://unpkg.com/three@0.152.2/examples/jsm/loaders/GLTFLoader.js';
+import { ARButton } from 'https://unpkg.com/three@0.152.2/examples/jsm/webxr/ARButton.js';
 
-      <!-- suelo visual -->
-      <img id="groundTex" src="https://cdn.pixabay.com/photo/2016/09/02/22/17/grass-1643215_1280.jpg" />
-    </a-assets>
+const STATUS = document.getElementById('status');
+const btnCenter = document.getElementById('btnCenter');
+const btnReset = document.getElementById('btnReset');
+const mvContainer = document.getElementById('mvContainer');
 
-    <!-- suelo de referencia (superficie donde se coloca el avatar) -->
-    <a-plane id="ground"
-             class="clickable"
-             position="0 0 0"
-             rotation="-90 0 0"
-             width="50"
-             height="50"
-             src="#groundTex"
-             repeat="10 10"
-             shadow="receive: true">
-    </a-plane>
+function setStatus(t, err=false){ STATUS.textContent = t; STATUS.style.color = err? '#ff8b8b' : '#ffd'; }
 
-    <!-- reticle: pequeño anillo que sigue el cursor/touch sobre el suelo -->
-    <a-ring id="reticle"
-            rotation="-90 0 0"
-            radius-inner="0.08"
-            radius-outer="0.12"
-            segments="48"
-            visible="false"
-            material="color: #00ff88; shader: flat; opacity: 0.95">
-    </a-ring>
+// Scene & renderer
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth/window.innerHeight, 0.01, 1000);
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.xr.enabled = true;
+renderer.xr.setReferenceSpaceType('local');
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
 
-    <!-- avatar (oculto hasta colocar) -->
-    <a-entity id="avatar"
-              gltf-model="#avatarModel"
-              visible="false"
-              animation-mixer
-              shadow="cast: true">
-    </a-entity>
+// lights
+const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+scene.add(hemi);
+const dir = new THREE.DirectionalLight(0xffffff, 0.8);
+dir.position.set(2,4,2);
+dir.castShadow = true;
+scene.add(dir);
 
-    <!-- luces -->
-    <a-entity light="type: ambient; intensity: 0.7"></a-entity>
-    <a-entity light="type: directional; intensity: 1.0" position="2 4 2" rotation="-45 45 0" shadow="cast: true"></a-entity>
+// ground (visual reference in non-AR or for debugging)
+const groundGeo = new THREE.PlaneGeometry(50,50);
+const groundMat = new THREE.MeshStandardMaterial({color:0x98bf8a});
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI/2;
+ground.receiveShadow = true;
+ground.position.y = 0;
+scene.add(ground);
 
-    <!-- cámara A-Frame -->
-    <a-entity id="cameraEl" camera look-controls position="0 1.6 0"></a-entity>
-  </a-scene>
+// reticle (ring)
+const ringGeo = new THREE.RingGeometry(0.08,0.12,64);
+const ringMat = new THREE.MeshBasicMaterial({color:0x00ff88, side: THREE.DoubleSide});
+const reticle = new THREE.Mesh(ringGeo, ringMat);
+reticle.rotation.x = -Math.PI/2;
+reticle.visible = false;
+scene.add(reticle);
 
-<script>
-(function () {
-  const statusEl = document.getElementById('status');
-  const btnPlace = document.getElementById('btnPlace');
-  const btnReset = document.getElementById('btnReset');
-  const btnCenter = document.getElementById('btnCenter');
+// GLTF model container
+let avatarRoot = new THREE.Group();
+avatarRoot.visible = false;
+scene.add(avatarRoot);
 
-  const sceneEl = document.querySelector('a-scene');
-  const reticleEl = document.getElementById('reticle');
-  const avatarEl = document.getElementById('avatar');
-  const groundEl = document.getElementById('ground');
+let modelBBox = null;
+let scaleToApply = 1;
+const desiredHeight = 1.8; // m
+const distanceMargin = 1.15; // leave 15% extra space
 
-  let threeCamera = null;
-  let raycaster = null;
-  let bboxOriginal = null;
-  let scaleToApply = 1;
-  let minDistance = 2.0; // distancia mínima calculada (m)
-  const desiredHeight = 1.8; // altura humana objetivo en metros (ajustable)
-  const distanceFactor = 2.0; // cuánto alejar según altura (ajustable)
-  let hasModel = false;
-
-  function setStatus(txt, err=false) {
-    statusEl.textContent = txt;
-    statusEl.style.color = err ? '#ff8b8b' : '#ffd';
+// load model
+const loader = new GLTFLoader();
+setStatus('Cargando modelo…');
+loader.load('https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb', gltf=>{
+  avatarRoot.add(gltf.scene);
+  // compute bbox (unscaled)
+  modelBBox = new THREE.Box3().setFromObject(gltf.scene);
+  if (!modelBBox.isEmpty()){
+    const modelHeight = modelBBox.max.y - modelBBox.min.y;
+    scaleToApply = desiredHeight / modelHeight;
+    gltf.scene.scale.setScalar(scaleToApply);
+    // adjust pivot so feet touch y=0 when placed: we will offset by -bbox.min.y * scale
+    setStatus('Modelo listo. Esperando AR (WebXR) o usando fallback.');
+  } else {
+    setStatus('Modelo cargado pero bbox vacío.', true);
   }
+}, xhr=>{}, err=>{
+  console.error(err);
+  setStatus('Error cargando modelo (ver consola).', true);
+});
 
-  function sceneReady() {
-    // three.js camera disponible en sceneEl.camera
-    threeCamera = sceneEl.camera; // THREE.Camera
-    raycaster = new THREE.Raycaster();
-    setStatus('Listo. Mueve el dedo/ratón sobre la pantalla para posicionar el reticle.');
-    // show reticle centered initially
-    centerReticle();
-  }
+// WEBXR hit-test setup
+let hitTestSource = null;
+let localReferenceSpace = null;
+let xrSession = null;
 
-  function centerReticle() {
-    // dispara un raycast desde el centro de la pantalla para fijar reticle
-    if (!threeCamera || !groundEl.object3D) return;
-    const ndc = new THREE.Vector2(0, 0); // centro
-    raycaster.setFromCamera(ndc, threeCamera);
-    const intersects = raycaster.intersectObject(groundEl.object3D, true);
-    if (intersects.length) {
-      const p = intersects[0].point;
-      reticleEl.object3D.position.copy(p);
-      reticleEl.object3D.position.y += 0.01;
-      reticleEl.setAttribute('visible', 'true');
-    } else {
-      // fallback: place reticle in front of camera at a safe distance
-      const camPos = threeCamera.getWorldPosition(new THREE.Vector3());
-      const camDir = threeCamera.getWorldDirection(new THREE.Vector3());
-      camDir.y = 0; camDir.normalize();
-      const fallback = camPos.clone().add(camDir.multiplyScalar(minDistance));
-      fallback.y = 0.01;
-      reticleEl.object3D.position.copy(fallback);
-      reticleEl.setAttribute('visible', 'true');
+async function initXR() {
+  if (navigator.xr) {
+    const supported = await navigator.xr.isSessionSupported('immersive-ar');
+    if (!supported) {
+      setStatus('WebXR AR no soportado en este dispositivo. Se ofrecerá fallback.', true);
+      setupFallback();
+      return;
     }
-  }
-
-  function computeModelMetrics() {
-    // compute bbox original (sin escala) y determine scale & minDistance
+    const sessionInit = { requiredFeatures: ['hit-test','dom-overlay'], optionalFeatures: ['local-floor','bounded-floor','light-estimation'], domOverlay: { root: document.body } };
     try {
-      // obliga a actualizar matrices
-      avatarEl.object3D.updateMatrixWorld(true);
-      bboxOriginal = new THREE.Box3().setFromObject(avatarEl.object3D);
-      const modelHeight = bboxOriginal.max.y - bboxOriginal.min.y;
-      if (!modelHeight || modelHeight <= 0) {
-        console.warn('Modelo sin altura válida:', modelHeight);
-        setStatus('Modelo cargado pero sin dimensiones válidas.', true);
-        return;
-      }
-      scaleToApply = desiredHeight / modelHeight;
-      avatarEl.object3D.scale.setScalar(scaleToApply);
-
-      // recalcula minDistance en base a tamaño escalado
-      const modelHeightScaled = modelHeight * scaleToApply;
-      minDistance = Math.max(1.0, modelHeightScaled * distanceFactor); // al menos 1m
-      hasModel = true;
-      setStatus('Modelo listo — arrastra para mover reticle y toca para colocar. Distancia minima: ' + minDistance.toFixed(2) + ' m');
+      xrSession = await navigator.xr.requestSession('immersive-ar', sessionInit);
     } catch (err) {
-      console.error('Error metrics:', err);
-      setStatus('Error al procesar el modelo (ver consola).', true);
-    }
-  }
-
-  // coloca avatar en punto (point = THREE.Vector3 world coords sobre el suelo)
-  function placeAvatarAtPoint(point) {
-    if (!hasModel || !bboxOriginal) {
-      setStatus('Modelo todavía no listo.', true);
+      console.warn('No session', err);
+      setStatus('No se pudo iniciar sesión AR (permiso o no soportado).', true);
+      setupFallback();
       return;
     }
-    // offset Y para que pies toquen el suelo: y = point.y - (bbox.min.y * scale)
-    const yOffset = -bboxOriginal.min.y * scaleToApply;
-    avatarEl.object3D.position.set(point.x, point.y + yOffset, point.z);
 
-    // garantizar distancia mínima respecto a la cámara (evita "meterse dentro")
-    const camWorld = threeCamera.getWorldPosition(new THREE.Vector3());
-    const dist = avatarEl.object3D.position.distanceTo(camWorld);
-    if (dist < minDistance) {
-      // mover avatar a lo largo del plano que conecta cam->avatar pero manteniendo Y sobre suelo
-      const dir = avatarEl.object3D.position.clone().sub(camWorld).setY(0).normalize();
-      const newPos = camWorld.clone().add(dir.multiplyScalar(minDistance));
-      newPos.y = point.y + yOffset;
-      avatarEl.object3D.position.copy(newPos);
-      setStatus('Ajustado por seguridad a distancia mínima: ' + minDistance.toFixed(2) + ' m');
-    }
+    renderer.xr.setSession(xrSession);
+    // reference spaces
+    const viewerSpace = await xrSession.requestReferenceSpace('viewer');
+    localReferenceSpace = await xrSession.requestReferenceSpace('local-floor').catch(()=>session.requestReferenceSpace('local'));
 
-    // orientar horizontalmente hacia la cámara
-    const camPos = threeCamera.getWorldPosition(new THREE.Vector3());
-    const lookTarget = camPos.clone(); lookTarget.y = avatarEl.object3D.position.y;
-    avatarEl.object3D.lookAt(lookTarget);
+    // request hit test source
+    hitTestSource = await xrSession.requestHitTestSource({ space: viewerSpace });
 
-    avatarEl.setAttribute('visible', 'true');
+    setStatus('WebXR activo: apunta la cámara a una superficie. Toca para colocar.');
+
+    xrSession.addEventListener('end', ()=> {
+      hitTestSource = null;
+      xrSession = null;
+      setStatus('Sesión AR finalizada.');
+      // show fallback UI maybe
+    });
+
+    // handle select via screen tap (XR input)
+    xrSession.addEventListener('select', (ev)=>{
+      if (reticle.visible) {
+        placeModelAt(reticle.position.clone());
+      }
+    });
+
+    // enter rendering loop
+    renderer.setAnimationLoop((time, frame) => {
+      if (frame) {
+        const refSpace = localReferenceSpace;
+        const session = frame.session;
+        const pose = frame.getViewerPose(refSpace);
+        // hit test
+        if (hitTestSource) {
+          const hitResults = frame.getHitTestResults(hitTestSource);
+          if (hitResults.length > 0) {
+            const hit = hitResults[0];
+            const hitPose = hit.getPose(refSpace);
+            reticle.visible = true;
+            reticle.position.set(hitPose.transform.position.x, hitPose.transform.position.y, hitPose.transform.position.z);
+            // rotate reticle to face camera roughly (optional)
+            // reticle.lookAt(camera.position); // not needed; it's flat on ground
+          } else {
+            reticle.visible = false;
+          }
+        }
+      }
+      renderer.render(scene, camera);
+    });
+
+    // also allow normal pointer to place (tap on screen)
+    renderer.domElement.addEventListener('click', (e)=>{
+      if (reticle.visible) placeModelAt(reticle.position.clone());
+    });
+
+  } else {
+    setStatus('navigator.xr no disponible — se aplicará fallback.', true);
+    setupFallback();
   }
+}
 
-  // handler unificado de pointermove (mouse/touch)
-  function onPointerMove(evt) {
-    if (!threeCamera) return;
-    const e = evt.touches ? evt.touches[0] : evt;
-    const ndc = new THREE.Vector2(
-      (e.clientX / window.innerWidth) * 2 - 1,
-      -(e.clientY / window.innerHeight) * 2 + 1
-    );
-    raycaster.setFromCamera(ndc, threeCamera);
-    const intersects = raycaster.intersectObject(groundEl.object3D, true);
-    if (intersects.length) {
-      const p = intersects[0].point;
-      reticleEl.object3D.position.copy(p);
-      reticleEl.object3D.position.y += 0.01;
-      reticleEl.setAttribute('visible', 'true');
+// compute minimum distance based on camera FOV so model fits in view
+function computeMinDistance(modelHeightScaled) {
+  // vertical FOV in radians
+  const fov = camera.fov * Math.PI / 180;
+  const halfView = Math.tan(fov / 2);
+  // required distance so that modelHeightScaled <= 2 * D * tan(fov/2)
+  // => D >= (modelHeightScaled/2) / tan(fov/2)
+  const D = (modelHeightScaled / 2) / halfView;
+  return D * distanceMargin;
+}
+
+// place model at world point (three.Vector3)
+function placeModelAt(point) {
+  if (!modelBBox) { setStatus('Modelo no listo aún.', true); return; }
+  // compute scaled modelHeight
+  const modelHeight = (modelBBox.max.y - modelBBox.min.y);
+  const modelHeightScaled = modelHeight * scaleToApply;
+
+  // initial Y offset so feet touch ground
+  const yOffset = -modelBBox.min.y * scaleToApply; // add to ground Y
+
+  // propose position (point is ground contact)
+  const proposed = point.clone();
+  proposed.y += yOffset;
+
+  // compute camera world pos
+  const camWorld = new THREE.Vector3();
+  camera.getWorldPosition(camWorld);
+
+  // distance check: ensure >= minDistance (based on FOV)
+  const dist = proposed.distanceTo(camWorld);
+  const minD = computeMinDistance(modelHeightScaled);
+  if (dist < minD) {
+    // push away along horizontal direction from camera to proposed
+    const dir = proposed.clone().sub(camWorld);
+    dir.y = 0;
+    if (dir.length() < 0.001) {
+      // fallback direction = camera forward projected on XZ
+      camera.getWorldDirection(dir);
+      dir.y = 0;
+      dir.normalize();
     } else {
-      // si no intersecta, esconder reticle o poner fallback frente cámara
-      reticleEl.setAttribute('visible', 'false');
+      dir.normalize();
     }
+    const newPos = camWorld.clone().add(dir.multiplyScalar(minD));
+    newPos.y = proposed.y; // keep on ground
+    avatarRoot.position.copy(newPos);
+    setStatus(`Posicionado. Ajustado a distancia mínima ${minD.toFixed(2)} m.`);
+  } else {
+    avatarRoot.position.copy(proposed);
+    setStatus('Avatar colocado en el punto seleccionado.');
   }
 
-  // handler unificado de pointerdown (colocar)
-  function onPointerDown(evt) {
-    if (!threeCamera) return;
-    const e = evt.touches ? evt.touches[0] : evt;
-    // preferimos posición del reticle si visible
-    if (reticleEl.getAttribute('visible') === true) {
-      const p = reticleEl.object3D.position.clone();
-      placeAvatarAtPoint(p);
-      return;
-    }
-    // fallback: cast ray from center to ground; si no, poner en frente basado en cam dir
-    const ndc = new THREE.Vector2(0, 0);
-    raycaster.setFromCamera(ndc, threeCamera);
-    const intersects = raycaster.intersectObject(groundEl.object3D, true);
-    if (intersects.length) {
-      placeAvatarAtPoint(intersects[0].point);
-      return;
-    }
-    // ultimate fallback: place in front of camera at minDistance (proyección horizontal)
-    const camPos = threeCamera.getWorldPosition(new THREE.Vector3());
-    const camDir = threeCamera.getWorldDirection(new THREE.Vector3());
-    camDir.y = 0; camDir.normalize();
-    const p = camPos.clone().add(camDir.multiplyScalar(minDistance));
-    p.y = 0; // ground Y assumed 0
-    placeAvatarAtPoint(p);
+  avatarRoot.visible = true;
+  // orient horizontally to face camera
+  const lookTarget = camWorld.clone();
+  lookTarget.y = avatarRoot.position.y;
+  avatarRoot.lookAt(lookTarget);
+}
+
+// fallback: model-viewer (mobile) button + message about AR.js marker option
+function setupFallback() {
+  // add a model-viewer button for mobile quick AR if available
+  // We'll create a small model-viewer element that, when tapped, opens Scene Viewer / Quick Look
+  const supportsModelViewer = true; // modern browsers
+  const mv = document.createElement('div');
+  mv.innerHTML = `
+    <model-viewer id="mv" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"
+      alt="Avatar 3D" ar ar-modes="webxr scene-viewer quick-look" camera-controls style="width:240px;height:160px;border-radius:8px;overflow:hidden;">
+    </model-viewer>
+    <div style="font-size:13px;margin-top:6px;color:#ffd;">Si tu navegador no soporta WebXR in-page, toca aquí para ver AR nativa (Scene Viewer / Quick Look).</div>
+  `;
+  mvContainer.appendChild(mv);
+  // lazy-load model-viewer script
+  const script = document.createElement('script');
+  script.type = 'module';
+  script.src = 'https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js';
+  document.head.appendChild(script);
+
+  setStatus('WebXR no disponible: se muestra fallback. También puedes usar AR.js (marker) en desktop.');
+}
+
+// UI buttons
+btnCenter.addEventListener('click', ()=>{
+  // cast center ray and move reticle if possible (for non-XR preview)
+  const ndc = new THREE.Vector2(0,0);
+  const ray = new THREE.Raycaster();
+  ray.setFromCamera(ndc, camera);
+  const inter = ray.intersectObject(ground, true);
+  if (inter.length) {
+    const p = inter[0].point;
+    reticle.position.copy(p);
+    reticle.position.y += 0.01;
+    reticle.visible = true;
+    setStatus('Reticle centrado.');
   }
+});
+btnReset.addEventListener('click', ()=>{
+  avatarRoot.visible = false;
+  setStatus('Avatar reseteado. Mueve el reticle y toca para colocar.');
+});
 
-  // keep avatar looking at camera horizontally on each frame (smooth)
-  function animateLook() {
-    if (avatarEl.getAttribute('visible') === true && threeCamera && hasModel) {
-      const camPos = threeCamera.getWorldPosition(new THREE.Vector3());
-      const target = camPos.clone(); target.y = avatarEl.object3D.position.y;
-      avatarEl.object3D.lookAt(target);
-    }
-    requestAnimationFrame(animateLook);
-  }
+// initial camera placement for non-AR preview
+camera.position.set(0,1.6,0);
+renderer.render(scene, camera);
 
-  // Reset avatar
-  function resetAvatar() {
-    avatarEl.setAttribute('visible', 'false');
-    // recenter reticle
-    centerReticle();
-    setStatus('Reset. Mueve el reticle y coloca de nuevo.');
-  }
+// try to init XR
+setStatus('Comprobando soporte WebXR…');
+initXR();
 
-  // botones UI
-  btnPlace.addEventListener('click', (e) => {
-    // simula un pointerdown en el centro (usa reticle o fallback)
-    onPointerDown({});
-  });
-  btnReset.addEventListener('click', resetAvatar);
-  btnCenter.addEventListener('click', centerReticle);
-
-  // listeners: pointer (incluye mouse & touch)
-  window.addEventListener('pointermove', (ev) => onPointerMove(ev), {passive:true});
-  window.addEventListener('pointerdown', (ev) => onPointerDown(ev), {passive:true});
-
-  // scene loaded
-  sceneEl.addEventListener('loaded', () => {
-    sceneReady();
-  });
-
-  // avatar model loaded -> compute bbox/scale/minDistance
-  avatarEl.addEventListener('model-loaded', () => {
-    setStatus('Modelo cargado. Calculando métricas...');
-    // give a short timeout to ensure inner meshes ready
-    setTimeout(() => {
-      computeModelMetrics();
-    }, 50);
-  });
-
-  // safety: detect if camera permission refused / getUserMedia not allowed
-  // AR.js handles getUserMedia internally; we provide helpful message if no camera
-  setTimeout(() => {
-    // Si al cabo de 5s no hay cámara (canvas blank) mostramos aviso
-    const videoFound = !!document.querySelector('video'); // AR.js inserts a video element when camera active
-    if (!videoFound) {
-      setStatus('Atención: la cámara no está activa. Asegúrate de dar permiso y/o usar HTTPS.', true);
-    }
-  }, 5000);
-
-  // start look loop
-  requestAnimationFrame(animateLook);
-
-})();
+// handle resize
+window.addEventListener('resize', ()=>{
+  camera.aspect = window.innerWidth/window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
 </script>
 
 </body>
