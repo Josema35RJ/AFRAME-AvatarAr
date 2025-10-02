@@ -1,72 +1,91 @@
 <!DOCTYPE html>
 <html lang="es">
-  <head>
-    <meta charset="UTF-8">
-    <title>Avatar AR</title>
-    <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<head>
+  <meta charset="UTF-8">
+  <title>Avatar AR Funcional</title>
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script>
+    AFRAME.registerComponent('place-on-hit', {
+      init: function () {
+        const el = this.el;
+        // Oculto al inicio
+        el.setAttribute('visible', false);
 
-    <script>
-      AFRAME.registerComponent('place-on-surface', {
-        init: function () {
-          // Inicialmente oculto hasta detectar superficie
-          this.el.setAttribute('visible', false);
-        },
-        tick: function () {
-          const scene = this.el.sceneEl;
+        const scene = el.sceneEl;
 
-          // Solo activo en modo AR
-          if (!scene.is('ar-mode')) return;
+        // Listener para hit-test AR
+        scene.addEventListener('ar-hit-test', (event) => {
+          const pose = event.detail.pose;
+          if (!pose) return;
 
-          const xrSystem = scene.systems.webxr;
-          if (!xrSystem.hitTestSource) return;
+          // Colocar avatar sobre la superficie detectada
+          el.setAttribute('position', {
+            x: pose.transform.position.x,
+            y: pose.transform.position.y,
+            z: pose.transform.position.z
+          });
+          el.setAttribute('visible', true);
+        });
+      }
+    });
+  </script>
+  <style>
+    body { margin: 0; overflow: hidden; }
+  </style>
+</head>
+<body>
+  <a-scene
+    xrweb="requiredFeatures: hit-test"
+    ar-mode-ui="enabled: true"
+    renderer="colorManagement: true"
+  >
+    <a-assets>
+      <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
+      <a-asset-item id="reticle" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/reticle.glb"></a-asset-item>
+    </a-assets>
 
-          const hitTestResults = xrSystem.hitTestSource.getHitTestResults();
-          if (!hitTestResults || hitTestResults.length === 0) {
-            this.el.setAttribute('visible', false);
-            return;
-          }
+    <!-- Guía visual para la superficie (reticle) -->
+    <a-entity
+      id="reticleEntity"
+      gltf-model="#reticle"
+      scale="0.2 0.2 0.2"
+      position="0 -10 0"
+    ></a-entity>
 
-          const hit = hitTestResults[0];
-          const pose = hit.getPose(scene.renderer.xr.getReferenceSpace());
-          if (pose) {
-            this.el.setAttribute('position', {
-              x: pose.transform.position.x,
-              y: pose.transform.position.y,
-              z: pose.transform.position.z
-            });
-            this.el.setAttribute('visible', true);
-          }
-        }
+    <!-- Avatar animado -->
+    <a-entity
+      gltf-model="#avatar"
+      place-on-hit
+      scale="1.2 1.2 1.2"
+      rotation="0 0 0"
+      animation-mixer
+      position="0 -10 0"
+    ></a-entity>
+
+    <!-- Cámara -->
+    <a-entity camera position="0 1.6 0.5" look-controls></a-entity>
+
+    <!-- Iluminación -->
+    <a-entity light="type: ambient; intensity: 0.8"></a-entity>
+    <a-entity light="type: directional; intensity: 0.6" position="0 4 0"></a-entity>
+  </a-scene>
+
+  <script>
+    // Mover el reticle a la posición del hit-test
+    const scene = document.querySelector('a-scene');
+    const reticle = document.querySelector('#reticleEntity');
+
+    scene.addEventListener('ar-hit-test', (event) => {
+      const pose = event.detail.pose;
+      if (!pose) return;
+      reticle.setAttribute('position', {
+        x: pose.transform.position.x,
+        y: pose.transform.position.y,
+        z: pose.transform.position.z
       });
-    </script>
-  </head>
-
-  <body style="margin: 0; overflow: hidden;">
-    <a-scene
-      xrweb="requiredFeatures: hit-test"
-      ar-mode-ui="enabled: true"
-      renderer="colorManagement: true"
-    >
-      <a-assets>
-        <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
-      </a-assets>
-
-      <!-- Avatar que se colocará sobre la superficie -->
-      <a-entity
-        gltf-model="#avatar"
-        place-on-surface
-        scale="1.2 1.2 1.2"
-        rotation="0 0 0"
-        position="0 -10 0"
-        animation-mixer
-      ></a-entity>
-
-      <!-- Cámara -->
-      <a-entity camera position="0 1.6 0.5" look-controls></a-entity>
-
-      <!-- Luz ambiental -->
-      <a-entity light="type: ambient; intensity: 0.8"></a-entity>
-      <a-entity light="type: directional; intensity: 0.6" position="0 4 0"></a-entity>
-    </a-scene>
-  </body>
+      reticle.setAttribute('visible', true);
+    });
+  </script>
+</body>
 </html>
+
