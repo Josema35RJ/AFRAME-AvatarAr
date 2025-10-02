@@ -2,19 +2,45 @@
 <html lang="es">
   <head>
     <meta charset="utf-8">
-    <title>Avatar en AR</title>
+    <title>Avatar AR Profesional</title>
     <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+    <style>
+      #ui {
+        position: absolute;
+        bottom: 20px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 999;
+      }
+      button {
+        padding: 10px 20px;
+        font-size: 16px;
+        margin: 5px;
+        border-radius: 8px;
+        border: none;
+        background: #0078ff;
+        color: white;
+        cursor: pointer;
+      }
+    </style>
   </head>
   <body>
-    <!-- Activa modo AR real -->
+    <!-- Escena AR -->
     <a-scene
-      webxr="optionalFeatures: hit-test, dom-overlay; overlayElement: #overlay"
       vr-mode-ui="enabled: false"
       renderer="colorManagement: true, physicallyCorrectLights: true"
       embedded
-      arjs="sourceType: webcam;">
+      xrweb="optionalFeatures: hit-test, dom-overlay; overlayElement: #ui">
 
-      <!-- Avatar (se insertará en el suelo con hit-test) -->
+      <!-- Reticle para colocar avatar -->
+      <a-entity id="reticle"
+                geometry="primitive: ring; radiusInner: 0.05; radiusOuter: 0.07"
+                material="color: #00ff00; shader: flat; opacity: 0.7"
+                rotation="-90 0 0"
+                visible="false">
+      </a-entity>
+
+      <!-- Avatar -->
       <a-entity id="avatar"
         gltf-model="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"
         scale="0.5 0.5 0.5"
@@ -23,20 +49,45 @@
 
       <!-- Luz -->
       <a-entity light="type: ambient; intensity: 1"></a-entity>
+      <a-entity light="type: directional; intensity: 0.8" position="1 3 2"></a-entity>
     </a-scene>
 
-    <div id="overlay">
-      <button onclick="placeAvatar()">📍 Colocar avatar</button>
+    <!-- UI -->
+    <div id="ui">
+      <button onclick="placeAvatar()">📍 Colocar Avatar</button>
+      <button onclick="resetAvatar()">🔄 Reset</button>
     </div>
 
     <script>
       const avatar = document.getElementById("avatar");
+      const reticle = document.getElementById("reticle");
 
+      // Colocar avatar en posición del reticle
       function placeAvatar() {
-        // Colocar el avatar frente a la cámara en el suelo
+        if (reticle.object3D.visible) {
+          avatar.setAttribute("visible", "true");
+          avatar.object3D.position.copy(reticle.object3D.position);
+
+          // Que mire hacia la cámara
+          const camera = document.querySelector("[camera]").object3D;
+          avatar.object3D.lookAt(camera.position);
+        }
+      }
+
+      // Resetear avatar
+      function resetAvatar() {
+        avatar.setAttribute("visible", "false");
+      }
+
+      // Fallback si no hay WebXR (simular AR con webcam)
+      if (!navigator.xr) {
+        console.warn("⚠️ WebXR no soportado, usando fallback");
+        document.querySelector("a-scene").setAttribute("arjs", "sourceType: webcam; debugUIEnabled: false;");
+
+        // Posición fija del avatar en modo simulado
         avatar.setAttribute("visible", "true");
         avatar.setAttribute("position", "0 0 -2");
-        avatar.setAttribute("rotation", "0 180 0"); // mirando al usuario
+        avatar.setAttribute("rotation", "0 180 0");
       }
     </script>
   </body>
