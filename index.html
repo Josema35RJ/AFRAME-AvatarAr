@@ -3,137 +3,81 @@
 <head>
   <meta charset="UTF-8">
   <title>Avatar AR GitHub Pages</title>
+  
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
 
   <script>
     AFRAME.registerComponent('ar-placer', {
-      schema: {
-        smoothing: { type: 'number', default: 0.1 }
-      },
       init: function () {
-        const el = this.el;
-        el.setAttribute('visible', false);
+        const reticle = document.getElementById('reticle');
+        const avatar = this.el;
 
-        const scene = el.sceneEl;
-        const reticle = document.querySelector('#reticle');
-
-        let placed = false;
-        this.currentPosition = new THREE.Vector3();
-        this.currentQuaternion = new THREE.Quaternion();
-
-        // Fallback para escritorio
-        if (!navigator.xr) {
-          console.warn("AR no soportado, mostrando fallback 3D");
-          el.setAttribute('position', '0 0 -2'); // 2m frente a la cámara
-          el.setAttribute('visible', true);
-          reticle.setAttribute('visible', false);
-          return;
-        }
-
-        // Mantener avatar frente a cámara antes de colocarlo
-        this.tick = (time, delta) => {
-          if (placed) return;
-          const cam = scene.camera.el;
-          if (!cam) return;
-          const camPos = cam.object3D.position.clone();
-          const forward = new THREE.Vector3(0,0,-1).applyQuaternion(cam.object3D.quaternion);
-          const targetPos = camPos.add(forward.multiplyScalar(1.2));
-          targetPos.y -= 0.5;
-          this.currentPosition.lerp(targetPos, this.data.smoothing);
-          el.object3D.position.copy(this.currentPosition);
-          el.object3D.visible = true;
-        };
-
-        // Hit-test AR
-        scene.addEventListener('ar-hit-test', (event) => {
-          const pose = event.detail.pose;
-          if (!pose) return;
-
-          // Reticle guía
-          reticle.object3D.position.set(
-            pose.transform.position.x,
-            pose.transform.position.y,
-            pose.transform.position.z
-          );
-          reticle.object3D.visible = true;
-
-          // Auto colocar avatar si no está colocado
-          if (!placed) {
-            this.currentPosition.lerp(new THREE.Vector3(
-              pose.transform.position.x,
-              pose.transform.position.y,
-              pose.transform.position.z
-            ), this.data.smoothing);
-            el.object3D.position.copy(this.currentPosition);
-
-            // Suavizado de rotación
-            const targetQuat = new THREE.Quaternion().setFromRotationMatrix(
-              new THREE.Matrix4().fromArray(pose.transform.matrix)
-            );
-            el.object3D.quaternion.slerp(targetQuat, this.data.smoothing);
-
-            el.object3D.visible = true;
-            placed = true;
+        this.el.sceneEl.addEventListener('enter-vr', () => {
+          if (this.el.sceneEl.is('ar-mode')) {
+            reticle.setAttribute('visible', 'true');
           }
         });
 
-        // Colocación manual con toque
-        scene.addEventListener('select', () => {
-          if (placed) return;
-          const pos = reticle.object3D.position.clone();
-          this.currentPosition.lerp(pos, this.data.smoothing);
-          el.object3D.position.copy(this.currentPosition);
-          el.object3D.visible = true;
-          placed = true;
+        reticle.addEventListener('select', () => {
+          // Copiamos la posición actual del reticle
+          const position = reticle.getAttribute('position');
+          
+          avatar.setAttribute('position', position);
+          avatar.setAttribute('visible', 'true');
+          
         });
       }
     });
   </script>
 
   <style>
-    body { margin:0; overflow:hidden; }
+    body { margin: 0; overflow: hidden; }
   </style>
 </head>
 
 <body>
   <a-scene
-    xrweb="requiredFeatures: hit-test"
-    ar-mode-ui="enabled: true"
-    renderer="colorManagement: true; physicallyCorrectLights: true"
+    webxr="requiredFeatures: hit-test, local-floor;"
+    renderer="colorManagement: true; physicallyCorrectLights: true;"
     shadow="type: pcfsoft"
   >
     <a-assets>
-      <a-asset-item id="avatar" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
+      <a-asset-item id="avatarAsset" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb"></a-asset-item>
       <a-asset-item id="reticleAsset" src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/reticle.glb"></a-asset-item>
     </a-assets>
 
-    <!-- Reticle guía -->
     <a-entity
       id="reticle"
       gltf-model="#reticleAsset"
       scale="0.2 0.2 0.2"
-      position="0 -10 0"
+      ar-hit-test
       visible="false"
       shadow="cast: false; receive: false"
     ></a-entity>
 
-    <!-- Avatar animado -->
     <a-entity
-      gltf-model="#avatar"
-      ar-placer="smoothing: 0.1"
+      id="avatar-entity"
+      gltf-model="#avatarAsset"
+      ar-placer
       scale="1.2 1.2 1.2"
-      rotation="0 0 0"
-      animation-mixer
-      shadow="cast: true; receive: true"
-      position="0 -10 0"
-    ></a-entity>
+      visible="false"
+      animation-mixer="clip: *; loop: repeat;"
+      shadow="cast: true; receive: false"
+    >
+        <a-plane 
+          position="0 0 0" 
+          rotation="-90 0 0" 
+          width="3" height="3" 
+          shadow="receive: true" 
+          material="opacity: 0.3; transparent: true; color: #000000; depthWrite: false;">
+        </a-plane>
+    </a-entity>
 
-    <!-- Cámara -->
-    <a-entity camera position="0 1.6 0.5" look-controls></a-entity>
+    <a-entity camera position="0 1.6 0"></a-entity>
 
-    <!-- Luces -->
-    <a-entity light="type: ambient; intensity: 0.6; color: #ffffff"></a-entity>
-    <a-entity light="type: directional; intensity: 0.8; position: 0 4 2" rotation="-45 0 0" castShadow="true"></a-entity>
+    <a-light type="ambient" intensity="0.5" color="#ffffff"></a-light>
+    <a-light type="directional" intensity="0.8" position="1 4 2" castShadow="true" shadow-mapSize="1024 1024"></a-light>
   </a-scene>
 </body>
 </html>
