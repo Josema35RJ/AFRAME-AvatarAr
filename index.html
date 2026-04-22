@@ -4,108 +4,36 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AR Avatar</title>
-  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
+
+  <script src="https://aframe.io/releases/1.7.1/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.5.0/dist/aframe-extras.min.js"></script>
+
   <script>
-    AFRAME.registerComponent('ar-hit-test-manager', {
-      init: function () {
-        this.hitTestSource      = null;
-        this.hitTestSourceReady = false;
-        this.reticleEl          = document.getElementById('reticle');
-        this.tmpMatrix          = new THREE.Matrix4();
 
-        const scene = this.el.sceneEl;
-
-        scene.addEventListener('enter-vr', () => {
-          if (!scene.is('ar-mode')) return;
-
-          const session = scene.xrSession;
-
-          session.requestReferenceSpace('viewer').then((viewerSpace) => {
-            session.requestHitTestSource({ space: viewerSpace }).then((source) => {
-              this.hitTestSource      = source;
-              this.hitTestSourceReady = true;
-            });
-          });
-
-          session.addEventListener('end', () => {
-            this.hitTestSourceReady = false;
-            this.hitTestSource      = null;
-            if (this.reticleEl) this.reticleEl.setAttribute('visible', 'false');
-            const ui = document.getElementById('ui-overlay');
-            if (ui) ui.style.display = 'none';
-          });
-
-          const ui = document.getElementById('ui-overlay');
-          if (ui) ui.style.display = 'flex';
-        });
-      },
-
-      tick: function () {
-        if (!this.hitTestSourceReady) return;
-
-        const scene    = this.el.sceneEl;
-        const frame    = scene.frame;
-        const renderer = scene.renderer;
-
-        if (!frame) return;
-
-        const referenceSpace = renderer.xr.getReferenceSpace();
-        const hitTestResults = frame.getHitTestResults(this.hitTestSource);
-
-        if (hitTestResults.length > 0) {
-          const hit  = hitTestResults[0];
-          const pose = hit.getPose(referenceSpace);
-
-          if (pose) {
-            this.reticleEl.setAttribute('visible', 'true');
-            this.tmpMatrix.fromArray(pose.transform.matrix);
-            this.reticleEl.object3D.matrix.copy(this.tmpMatrix);
-            this.reticleEl.object3D.matrixAutoUpdate = false;
-          }
-        } else {
-          this.reticleEl.setAttribute('visible', 'false');
-        }
-      }
-    });
     AFRAME.registerComponent('ar-placer', {
       init: function () {
-        this.placed    = false;
-        this.reticle   = document.getElementById('reticle');
-        this.scene     = this.el.sceneEl;
-        this.worldPos  = new THREE.Vector3();
-        this.worldQuat = new THREE.Quaternion();
-        this.worldScl  = new THREE.Vector3();
+        this.placed = false;
+        this.scene  = this.el.sceneEl;
+        this.ui     = document.getElementById('ui-overlay');
 
         this.scene.addEventListener('enter-vr', () => {
           if (!this.scene.is('ar-mode')) return;
-          const session = this.scene.xrSession;
-          session.addEventListener('select', this.onSelect.bind(this));
+          if (this.ui) this.ui.style.display = 'flex';
         });
 
-        const resetBtn = document.getElementById('btn-reset');
-        if (resetBtn) resetBtn.addEventListener('click', this.reset.bind(this));
-      },
+        this.scene.addEventListener('exit-vr', () => {
+          if (this.ui) this.ui.style.display = 'none';
+        });
 
-      onSelect: function () {
-        if (!this.reticle.getAttribute('visible')) return;
+        this.scene.addEventListener('ar-hit-test-select', () => {
+          if (!this.placed) {
+            this.placed = true;
+            this.updateUI('placed');
+          }
+        });
 
-        this.reticle.object3D.updateMatrixWorld(true);
-        this.reticle.object3D.matrixWorld.decompose(
-          this.worldPos,
-          this.worldQuat,
-          this.worldScl
-        );
-
-        this.el.object3D.position.copy(this.worldPos);
-        this.el.object3D.quaternion.copy(this.worldQuat);
-        this.el.object3D.matrixAutoUpdate = true;
-        this.el.setAttribute('visible', 'true');
-
-        if (!this.placed) {
-          this.placed = true;
-          this.updateUI('placed');
-        }
+        const btn = document.getElementById('btn-reset');
+        if (btn) btn.addEventListener('click', this.reset.bind(this));
       },
 
       reset: function () {
@@ -115,15 +43,15 @@
       },
 
       updateUI: function (state) {
-        const tip   = document.getElementById('ui-tip');
-        const reset = document.getElementById('btn-reset');
+        const tip = document.getElementById('ui-tip');
+        const btn = document.getElementById('btn-reset');
         if (!tip) return;
         if (state === 'placed') {
           tip.textContent = 'Toca de nuevo para mover el avatar';
-          if (reset) reset.style.display = 'inline-block';
+          if (btn) btn.style.display = 'inline-block';
         } else {
           tip.textContent = 'Apunta al suelo y toca para colocar';
-          if (reset) reset.style.display = 'none';
+          if (btn) btn.style.display = 'none';
         }
       }
     });
@@ -174,12 +102,13 @@
     <button id="btn-reset">Quitar avatar</button>
   </div>
 
+  -->
   <a-scene
-    webxr="requiredFeatures: hit-test,local-floor"
+    webxr="requiredFeatures: hit-test,local-floor; optionalFeatures: dom-overlay,light-estimation; overlayElement: #ui-overlay"
+    ar-hit-test="target: #avatar-entity"
     renderer="colorManagement: true; antialias: true; exposure: 1.2; toneMapping: ACESFilmic"
     shadow="type: pcfsoft; autoUpdate: true"
     loading-screen="dotsColor: white; backgroundColor: black"
-    ar-hit-test-manager
   >
 
     <a-assets timeout="10000">
@@ -187,7 +116,8 @@
         src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb">
       </a-asset-item>
     </a-assets>
-    <a-entity id="reticle" visible="false">
+
+    <a-entity id="ar-hit-test-reticle" visible="false">
       <a-ring
         color="#00FF00"
         radius-inner="0.06"
@@ -200,13 +130,15 @@
         radius-inner="0.02"
         radius-outer="0.05"
         rotation="-90 0 0"
-        material="shader: flat; side: double; opacity: 0.6; transparent: true; depthTest: false">
+        material="shader: flat; side: double; opacity: 0.55; transparent: true; depthTest: false">
       </a-ring>
     </a-entity>
+    
     <a-entity
       id="avatar-entity"
       gltf-model="#avatarAsset"
       ar-placer
+      anchored
       scale="1.2 1.2 1.2"
       visible="false"
       animation-mixer="clip: *; loop: repeat"
