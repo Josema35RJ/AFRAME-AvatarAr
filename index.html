@@ -4,41 +4,120 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AR Avatar</title>
+
+  <!--
+    A-Frame 1.5.0  →  Three.js r158
+    aframe-extras 7.2.0  →  animation-mixer correcto para r158
+  -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
 
   <script>
+    /* ─────────────────────────────────────────────────────────────
+       SISTEMA AR-HIT-TEST PROPIO
+       A-Frame 1.5 expone la sesión WebXR en sceneEl.xrSession.
+       Usamos requestHitTestSource directamente para máxima
+       compatibilidad con Chrome/Android WebXR AR.
+    ───────────────────────────────────────────────────────────── */
+    AFRAME.registerComponent('ar-hit-test-manager', {
+      init: function () {
+        this.hitTestSource      = null;
+        this.hitTestSourceReady = false;
+        this.reticleEl          = document.getElementById('reticle');
+        this.tmpMatrix          = new THREE.Matrix4();
+
+        const scene = this.el.sceneEl;
+
+        scene.addEventListener('enter-vr', () => {
+          if (!scene.is('ar-mode')) return;
+
+          const session = scene.xrSession;
+
+          session.requestReferenceSpace('viewer').then((viewerSpace) => {
+            session.requestHitTestSource({ space: viewerSpace }).then((source) => {
+              this.hitTestSource      = source;
+              this.hitTestSourceReady = true;
+            });
+          });
+
+          session.addEventListener('end', () => {
+            this.hitTestSourceReady = false;
+            this.hitTestSource      = null;
+            if (this.reticleEl) this.reticleEl.setAttribute('visible', 'false');
+            const ui = document.getElementById('ui-overlay');
+            if (ui) ui.style.display = 'none';
+          });
+
+          const ui = document.getElementById('ui-overlay');
+          if (ui) ui.style.display = 'flex';
+        });
+      },
+
+      tick: function () {
+        if (!this.hitTestSourceReady) return;
+
+        const scene    = this.el.sceneEl;
+        const frame    = scene.frame;
+        const renderer = scene.renderer;
+
+        if (!frame) return;
+
+        const referenceSpace = renderer.xr.getReferenceSpace();
+        const hitTestResults = frame.getHitTestResults(this.hitTestSource);
+
+        if (hitTestResults.length > 0) {
+          const hit  = hitTestResults[0];
+          const pose = hit.getPose(referenceSpace);
+
+          if (pose) {
+            this.reticleEl.setAttribute('visible', 'true');
+            this.tmpMatrix.fromArray(pose.transform.matrix);
+            this.reticleEl.object3D.matrix.copy(this.tmpMatrix);
+            this.reticleEl.object3D.matrixAutoUpdate = false;
+          }
+        } else {
+          this.reticleEl.setAttribute('visible', 'false');
+        }
+      }
+    });
+
+    /* ─────────────────────────────────────────────────────────────
+       COMPONENTE AR-PLACER
+       Escucha el tap WebXR ('select') y coloca el avatar donde
+       apunta el reticle, copiando su posición/rotación world.
+    ───────────────────────────────────────────────────────────── */
     AFRAME.registerComponent('ar-placer', {
       init: function () {
-        this.placed = false;
-        this.reticle = document.getElementById('reticle');
-        this.ui      = document.getElementById('ui-overlay');
-        this.scene   = this.el.sceneEl;
+        this.placed    = false;
+        this.reticle   = document.getElementById('reticle');
+        this.scene     = this.el.sceneEl;
+        this.worldPos  = new THREE.Vector3();
+        this.worldQuat = new THREE.Quaternion();
+        this.worldScl  = new THREE.Vector3();
 
-        /* Show/hide the UI overlay when entering/exiting AR */
         this.scene.addEventListener('enter-vr', () => {
-          if (this.scene.is('ar-mode')) {
-            if (this.ui) this.ui.style.display = 'flex';
-          }
+          if (!this.scene.is('ar-mode')) return;
+          const session = this.scene.xrSession;
+          session.addEventListener('select', this.onSelect.bind(this));
         });
-
-        this.scene.addEventListener('exit-vr', () => {
-          if (this.ui) this.ui.style.display = 'none';
-        });
-
-        /* WebXR AR tap → 'select' fires on the scene element */
-        this.scene.addEventListener('select', this.onSelect.bind(this));
 
         const resetBtn = document.getElementById('btn-reset');
         if (resetBtn) resetBtn.addEventListener('click', this.reset.bind(this));
       },
 
       onSelect: function () {
-        /* Read the reticle world position set by ar-hit-test each frame */
-        const pos = this.reticle.object3D.position;
-        if (!pos) return;
+        if (!this.reticle.getAttribute('visible')) return;
 
-        this.el.object3D.position.copy(pos);
+        this.reticle.object3D.updateMatrixWorld(true);
+        this.reticle.object3D.matrixWorld.decompose(
+          this.worldPos,
+          this.worldQuat,
+          this.worldScl
+        );
+
+        this.el.object3D.position.copy(this.worldPos);
+        this.el.object3D.quaternion.copy(this.worldQuat);
+        this.el.object3D.matrixAutoUpdate = true;
         this.el.setAttribute('visible', 'true');
 
         if (!this.placed) {
@@ -114,14 +193,11 @@
   </div>
 
   <a-scene
-    webxr="requiredFeatures: hit-test, local-floor;"
-    renderer="colorManagement: true;
-              physicallyCorrectLights: true;
-              antialias: true;
-              exposure: 1.2;
-              toneMapping: ACESFilmic"
+    webxr="requiredFeatures: hit-test,local-floor"
+    renderer="colorManagement: true; antialias: true; exposure: 1.2; toneMapping: ACESFilmic"
     shadow="type: pcfsoft; autoUpdate: true"
     loading-screen="dotsColor: white; backgroundColor: black"
+    ar-hit-test-manager
   >
 
     <a-assets timeout="10000">
@@ -131,27 +207,34 @@
     </a-assets>
 
     <!--
-      Reticle: driven by ar-hit-test (built into A-Frame 1.5).
-      No external GLB needed — using a plain A-Frame ring instead.
-      ar-hit-test automatically moves this entity to the detected surface
-      each frame and hides it when no surface is found.
+      RETICLE
+      - visible="false" por defecto; ar-hit-test-manager lo activa
+        solo cuando hay un hit valido con la superficie detectada.
+      - matrixAutoUpdate desactivado: posicionamos via matrix world directa.
+      - shader:flat + depthTest:false = siempre visible sobre cualquier superficie.
     -->
-    <a-entity
-      id="reticle"
-      ar-hit-test="targetEl: #avatar-entity;"
-      visible="false">
+    <a-entity id="reticle" visible="false">
       <a-ring
         color="#00FF00"
         radius-inner="0.06"
-        radius-outer="0.1"
+        radius-outer="0.11"
         rotation="-90 0 0"
-        material="side: double; shader: flat;">
+        material="shader: flat; side: double; depthTest: false">
+      </a-ring>
+      <a-ring
+        color="#ffffff"
+        radius-inner="0.02"
+        radius-outer="0.05"
+        rotation="-90 0 0"
+        material="shader: flat; side: double; opacity: 0.6; transparent: true; depthTest: false">
       </a-ring>
     </a-entity>
 
     <!--
-      Avatar: hidden until first tap.
-      ar-placer reads the reticle world position on each 'select' event.
+      AVATAR
+      - animation-mixer sin crossFadeDuration (no existe en extras 7.2)
+      - shadow solo cast (el suelo AR es transparente)
+      - visible="false" hasta el primer tap
     -->
     <a-entity
       id="avatar-entity"
@@ -159,37 +242,36 @@
       ar-placer
       scale="1.2 1.2 1.2"
       visible="false"
-      animation-mixer="clip: *; loop: repeat; crossFadeDuration: 0.3"
+      animation-mixer="clip: *; loop: repeat"
       shadow="cast: true; receive: false"
     >
-      <!-- Soft shadow blob on the floor beneath the avatar -->
       <a-plane
         position="0 0.001 0"
         rotation="-90 0 0"
-        width="3" height="3"
-        shadow="receive: true; cast: false"
-        material="opacity: 0.25;
-                  transparent: true;
-                  color: #111;
-                  depthWrite: false;
-                  shader: flat"
-      ></a-plane>
+        width="2.5" height="2.5"
+        material="shader: flat; color: #000; opacity: 0.18; transparent: true; depthWrite: false; side: double">
+      </a-plane>
     </a-entity>
 
-    <!-- Camera -->
+    <!-- Camara sin cursor: el input es el tap XR, no raycasting -->
     <a-entity camera position="0 1.6 0"></a-entity>
 
-    <!-- Lighting -->
-    <a-light type="hemisphere"
+    <!--
+      ILUMINACION
+      physicallyCorrectLights eliminado (deprecado en Three.js r155+, genera
+      warning useLegacyLights en r158).
+    -->
+    <a-light
+      type="hemisphere"
       color="#ddeeff"
       ground-color="#8B7355"
-      intensity="0.6">
+      intensity="0.65">
     </a-light>
 
     <a-light
       type="directional"
       color="#fff8f0"
-      intensity="1.0"
+      intensity="1.1"
       position="2 6 3"
       cast-shadow="true"
       shadow-map-size="2048 2048"
@@ -197,13 +279,13 @@
       shadow-camera-right="3"
       shadow-camera-top="3"
       shadow-camera-bottom="-3"
-      shadow-bias="-0.001">
+      shadow-bias="-0.0005">
     </a-light>
 
     <a-light
       type="point"
       color="#c8d8ff"
-      intensity="0.3"
+      intensity="0.35"
       distance="8"
       decay="2"
       position="-3 2 -2">
