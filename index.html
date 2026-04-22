@@ -5,11 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AR Avatar</title>
 
+  <!--
+    A-Frame 1.5.0  →  Three.js r158
+    aframe-extras 7.2.0  →  animation-mixer correcto para r158
+  -->
   <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/gh/c-frame/aframe-extras@7.2.0/dist/aframe-extras.min.js"></script>
 
   <script>
-
+    /* ─────────────────────────────────────────────────────────────
+       SISTEMA AR-HIT-TEST PROPIO
+       A-Frame 1.5 expone la sesión WebXR en sceneEl.xrSession.
+       Usamos requestHitTestSource directamente para máxima
+       compatibilidad con Chrome/Android WebXR AR.
+    ───────────────────────────────────────────────────────────── */
     AFRAME.registerComponent('ar-hit-test-manager', {
       init: function () {
         this.hitTestSource      = null;
@@ -72,7 +81,11 @@
       }
     });
 
-
+    /* ─────────────────────────────────────────────────────────────
+       COMPONENTE AR-PLACER
+       Escucha el tap WebXR ('select') y coloca el avatar donde
+       apunta el reticle, copiando su posición/rotación world.
+    ───────────────────────────────────────────────────────────── */
     AFRAME.registerComponent('ar-placer', {
       init: function () {
         this.placed    = false;
@@ -193,6 +206,13 @@
       </a-asset-item>
     </a-assets>
 
+    <!--
+      RETICLE
+      - visible="false" por defecto; ar-hit-test-manager lo activa
+        solo cuando hay un hit valido con la superficie detectada.
+      - matrixAutoUpdate desactivado: posicionamos via matrix world directa.
+      - shader:flat + depthTest:false = siempre visible sobre cualquier superficie.
+    -->
     <a-entity id="reticle" visible="false">
       <a-ring
         color="#00FF00"
@@ -209,6 +229,13 @@
         material="shader: flat; side: double; opacity: 0.6; transparent: true; depthTest: false">
       </a-ring>
     </a-entity>
+
+    <!--
+      AVATAR
+      - animation-mixer sin crossFadeDuration (no existe en extras 7.2)
+      - shadow solo cast (el suelo AR es transparente)
+      - visible="false" hasta el primer tap
+    -->
     <a-entity
       id="avatar-entity"
       gltf-model="#avatarAsset"
@@ -226,8 +253,14 @@
       </a-plane>
     </a-entity>
 
+    <!-- Camara sin cursor: el input es el tap XR, no raycasting -->
     <a-entity camera position="0 1.6 0"></a-entity>
 
+    <!--
+      ILUMINACION
+      physicallyCorrectLights eliminado (deprecado en Three.js r155+, genera
+      warning useLegacyLights en r158).
+    -->
     <a-light
       type="hemisphere"
       color="#ddeeff"
