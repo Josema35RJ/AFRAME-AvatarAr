@@ -133,12 +133,11 @@
     </a-assets>
 
     <a-entity
-      id="reticle"
-      gltf-model="#reticleAsset"
-      scale="0.2 0.2 0.2"
-      ar-hit-test
-      visible="false"
-    ></a-entity>
+  id="reticle"
+  ar-hit-test
+  visible="false">
+  <a-ring color="#00FF00" radius-inner="0.1" radius-outer="0.15" rotation="-90 0 0"></a-ring>
+</a-entity>
 
     <a-entity
       id="avatar-entity"
