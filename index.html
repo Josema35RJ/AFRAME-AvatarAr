@@ -15,18 +15,18 @@
         this.ui      = document.getElementById('ui-overlay');
         this.scene   = this.el.sceneEl;
 
+        /* Show/hide the UI overlay when entering/exiting AR */
         this.scene.addEventListener('enter-vr', () => {
           if (this.scene.is('ar-mode')) {
-            this.reticle.setAttribute('visible', 'true');
             if (this.ui) this.ui.style.display = 'flex';
           }
         });
 
         this.scene.addEventListener('exit-vr', () => {
-          this.reticle.setAttribute('visible', 'false');
           if (this.ui) this.ui.style.display = 'none';
         });
 
+        /* WebXR AR tap → 'select' fires on the scene element */
         this.scene.addEventListener('select', this.onSelect.bind(this));
 
         const resetBtn = document.getElementById('btn-reset');
@@ -34,12 +34,13 @@
       },
 
       onSelect: function () {
-        const pos = this.reticle.getAttribute('position');
-        const rot = this.reticle.getAttribute('rotation');
+        /* Read the reticle world position set by ar-hit-test each frame */
+        const pos = this.reticle.object3D.position;
         if (!pos) return;
-        this.el.setAttribute('position', pos);
-        if (rot) this.el.setAttribute('rotation', { x: 0, y: rot.y, z: 0 });
+
+        this.el.object3D.position.copy(pos);
         this.el.setAttribute('visible', 'true');
+
         if (!this.placed) {
           this.placed = true;
           this.updateUI('placed');
@@ -70,6 +71,7 @@
   <style>
     *, *::before, *::after { box-sizing: border-box; }
     body { margin: 0; overflow: hidden; background: #000; font-family: system-ui, sans-serif; }
+
     #ui-overlay {
       display: none;
       position: fixed;
@@ -116,29 +118,41 @@
     renderer="colorManagement: true;
               physicallyCorrectLights: true;
               antialias: true;
-              powerPreference: high-performance;
               exposure: 1.2;
               toneMapping: ACESFilmic"
     shadow="type: pcfsoft; autoUpdate: true"
     loading-screen="dotsColor: white; backgroundColor: black"
   >
 
-    <a-assets timeout="8000">
+    <a-assets timeout="10000">
       <a-asset-item id="avatarAsset"
         src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/3dpea.com_Salute.glb">
       </a-asset-item>
-      <a-asset-item id="reticleAsset"
-        src="https://cdn.jsdelivr.net/gh/Josema35RJ/Avatar@main/reticle.glb">
-      </a-asset-item>
     </a-assets>
 
+    <!--
+      Reticle: driven by ar-hit-test (built into A-Frame 1.5).
+      No external GLB needed — using a plain A-Frame ring instead.
+      ar-hit-test automatically moves this entity to the detected surface
+      each frame and hides it when no surface is found.
+    -->
     <a-entity
-  id="reticle"
-  ar-hit-test
-  visible="false">
-  <a-ring color="#00FF00" radius-inner="0.1" radius-outer="0.15" rotation="-90 0 0"></a-ring>
-</a-entity>
+      id="reticle"
+      ar-hit-test="targetEl: #avatar-entity;"
+      visible="false">
+      <a-ring
+        color="#00FF00"
+        radius-inner="0.06"
+        radius-outer="0.1"
+        rotation="-90 0 0"
+        material="side: double; shader: flat;">
+      </a-ring>
+    </a-entity>
 
+    <!--
+      Avatar: hidden until first tap.
+      ar-placer reads the reticle world position on each 'select' event.
+    -->
     <a-entity
       id="avatar-entity"
       gltf-model="#avatarAsset"
@@ -148,6 +162,7 @@
       animation-mixer="clip: *; loop: repeat; crossFadeDuration: 0.3"
       shadow="cast: true; receive: false"
     >
+      <!-- Soft shadow blob on the floor beneath the avatar -->
       <a-plane
         position="0 0.001 0"
         rotation="-90 0 0"
@@ -161,9 +176,15 @@
       ></a-plane>
     </a-entity>
 
+    <!-- Camera -->
     <a-entity camera position="0 1.6 0"></a-entity>
 
-    <a-light type="hemisphere" color="#ddeeff" ground-color="#8B7355" intensity="0.6"></a-light>
+    <!-- Lighting -->
+    <a-light type="hemisphere"
+      color="#ddeeff"
+      ground-color="#8B7355"
+      intensity="0.6">
+    </a-light>
 
     <a-light
       type="directional"
@@ -176,10 +197,17 @@
       shadow-camera-right="3"
       shadow-camera-top="3"
       shadow-camera-bottom="-3"
-      shadow-bias="-0.001"
-    ></a-light>
+      shadow-bias="-0.001">
+    </a-light>
 
-    <a-light type="point" color="#c8d8ff" intensity="0.3" distance="8" decay="2" position="-3 2 -2"></a-light>
+    <a-light
+      type="point"
+      color="#c8d8ff"
+      intensity="0.3"
+      distance="8"
+      decay="2"
+      position="-3 2 -2">
+    </a-light>
 
   </a-scene>
 </body>
